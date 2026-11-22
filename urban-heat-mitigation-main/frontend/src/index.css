@@ -26,12 +26,12 @@
   --accent-hover: #2563eb;
   --accent-glow: transparent;
 
-  /* Semantic Heat Tiers (preserved across themes for data clarity) */
-  --tier-critical: #FF1744;
-  --tier-high: #FF9100;
-  --tier-moderate: #FFD600;
-  --tier-normal: #00C853;
-  --tier-cool: #2979FF;
+  /* Semantic Heat Tiers (ColorBrewer RdYlBu scientific colorblind-friendly ramp) */
+  --tier-critical: #D7191C;
+  --tier-high: #FDAE61;
+  --tier-moderate: #FFFFBF;
+  --tier-normal: #ABD9E9;
+  --tier-cool: #2C7BB6;
 
   /* Instrument Surfaces & Boundaries */
   --glass-bg: var(--surface-1);

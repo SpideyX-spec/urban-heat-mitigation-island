@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
@@ -27,12 +27,13 @@ const EMPTY_INTENSITIES = {
   tree_cover: 0, cool_roofs: 0, green_roofs: 0, water_bodies: 0, albedo_improvement: 0
 };
 
+// Colorblind-friendlier scientific 5-class temperature ramp (ColorBrewer RdYlBu)
 const TIER_COLORS = {
-  critical: [255, 23, 68],
-  high: [255, 145, 0],
-  moderate: [255, 214, 0],
-  normal: [0, 200, 83],
-  cool: [41, 121, 255]
+  critical: [215, 25, 28],    // #D7191C
+  high: [253, 174, 97],       // #FDAE61
+  moderate: [255, 255, 191],  // #FFFFBF
+  normal: [171, 217, 233],    // #ABD9E9
+  cool: [44, 123, 182]        // #2C7BB6
 };
 
 export default function ScenarioView({ city, cityInfo }) {
@@ -167,15 +168,51 @@ export default function ScenarioView({ city, cityInfo }) {
     };
   };
 
+  // Compute city baseline minimum for 3D elevation scaling
+  const minLst = useMemo(() => {
+    if (gridData?.features && gridData.features.length > 0) {
+      let min = Infinity;
+      for (let i = 0; i < gridData.features.length; i++) {
+        const val = gridData.features[i].properties?.lst_mean;
+        if (typeof val === 'number' && val < min) min = val;
+      }
+      if (min < Infinity) return min;
+    }
+    return 20;
+  }, [gridData]);
+
+  const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
+  const [viewState, setViewState] = useState({
+    longitude: centerLon,
+    latitude: centerLat,
+    zoom: 10,
+    pitch: 0,
+    bearing: 0
+  });
+
+  const is3D = (viewState?.pitch || 0) > 10;
+
   const beforeLayer = new GeoJsonLayer({
     id: 'before-layer',
     data: gridData,
     pickable: true,
     stroked: false,
     filled: true,
+    extruded: is3D,
+    wireframe: false,
     getFillColor: d => {
       const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
-      return [...color, 180];
+      return [...color, 175];
+    },
+    getElevation: d => {
+      const lst = d.properties?.lst_mean ?? minLst;
+      const delta = Math.max(0, lst - minLst);
+      return 40 + delta * 110;
+    },
+    transitions: { getElevation: 600, getFillColor: 400 },
+    updateTriggers: {
+      extruded: [is3D],
+      getElevation: [minLst]
     }
   });
 
@@ -185,20 +222,22 @@ export default function ScenarioView({ city, cityInfo }) {
     pickable: true,
     stroked: false,
     filled: true,
+    extruded: is3D,
+    wireframe: false,
     getFillColor: d => {
       const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
-      return [...color, 180];
+      return [...color, 175];
     },
-    transitions: { getFillColor: 1000 }
-  });
-
-  const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
-  const [viewState, setViewState] = useState({
-    longitude: centerLon,
-    latitude: centerLat,
-    zoom: 10,
-    pitch: 0,
-    bearing: 0
+    getElevation: d => {
+      const lst = d.properties?.lst_mean ?? minLst;
+      const delta = Math.max(0, lst - minLst);
+      return 40 + delta * 110;
+    },
+    transitions: { getElevation: 600, getFillColor: 400 },
+    updateTriggers: {
+      extruded: [is3D],
+      getElevation: [minLst]
+    }
   });
 
   // Synchronized camera state change handler for both Before and After maps

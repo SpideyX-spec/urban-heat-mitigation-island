@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
@@ -20,13 +20,13 @@ import './MapView.css';
 const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
-// Tier colors matching backend
+// Colorblind-friendlier scientific 5-class temperature ramp (ColorBrewer RdYlBu)
 const TIER_COLORS = {
-  critical: [255, 23, 68],
-  high: [255, 145, 0],
-  moderate: [255, 214, 0],
-  normal: [0, 200, 83],
-  cool: [41, 121, 255]
+  critical: [215, 25, 28],    // #D7191C - critical heat anomaly
+  high: [253, 174, 97],       // #FDAE61 - high heat anomaly
+  moderate: [255, 255, 191],  // #FFFFBF - moderate heat anomaly
+  normal: [171, 217, 233],    // #ABD9E9 - normal / baseline microclimate
+  cool: [44, 123, 182]        // #2C7BB6 - cool microclimate sink
 };
 
 export default function MapView({ city, cityInfo }) {
@@ -90,41 +90,68 @@ export default function MapView({ city, cityInfo }) {
     return () => { cancelled = true; };
   }, [city]);
 
+  // Dynamically compute the baseline minimum LST across the city dataset
+  // so elevation scaling works consistently regardless of whether the city
+  // is cooler (e.g. Bengaluru/Guwahati/Kochi < 35°C) or hot arid (e.g. Phoenix/Delhi).
+  const minLst = useMemo(() => {
+    if (overview?.min_lst_c !== undefined && overview?.min_lst_c !== null) {
+      return overview.min_lst_c;
+    }
+    if (gridData?.features && gridData.features.length > 0) {
+      let min = Infinity;
+      for (let i = 0; i < gridData.features.length; i++) {
+        const val = gridData.features[i].properties?.lst_mean;
+        if (typeof val === 'number' && val < min) min = val;
+      }
+      if (min < Infinity) return min;
+    }
+    return 20;
+  }, [overview, gridData]);
+
+  // 2D vs 3D mode is derived directly from camera pitch
+  const is3D = (viewState?.pitch || 0) > 10;
+
   const layers = [
     new GeoJsonLayer({
       id: 'grid-layer',
       data: gridData,
       pickable: true,
-      stroked: true,
+      stroked: false,
       filled: true,
-      extruded: true,
-      wireframe: true,
-      lineWidthMinPixels: 1,
-      getLineColor: [255, 255, 255, 20],
+      extruded: is3D,
+      wireframe: false,
       getFillColor: d => {
         const tier = d.properties.tier;
         const color = TIER_COLORS[tier] || [128, 128, 128];
-        // Add alpha based on LST intensity to create a glowing effect
-        return [...color, 180];
+        // 175 alpha (68% opacity) gives vivid scientific color saturation
+        // while allowing basemap road networks, water bodies and place labels to remain legible
+        return [...color, 175];
       },
       getElevation: d => {
-        // Extrude based on LST (subtract base to exaggerate differences)
-        return Math.max(0, (d.properties.lst_mean - 35) * 100);
+        // Robust dynamic elevation: scales from city minimum so cooler cities (< 35°C)
+        // produce rich topographical 3D relief rather than flat 0-height terrain
+        const lst = d.properties?.lst_mean ?? minLst;
+        const delta = Math.max(0, lst - minLst);
+        return 40 + delta * 110;
       },
       transitions: {
-        getFillColor: 500,
-        getElevation: 500
+        getFillColor: 400,
+        getElevation: 600
+      },
+      updateTriggers: {
+        extruded: [is3D],
+        getElevation: [minLst]
       }
     })
   ];
 
-  // Controlled camera view state
+  // Controlled camera view state - 2D is the default visualization mode (pitch: 0)
   const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
   const [viewState, setViewState] = useState({
     longitude: centerLon,
     latitude: centerLat,
     zoom: 10.5,
-    pitch: 45,
+    pitch: 0,
     bearing: 0
   });
 
@@ -164,12 +191,19 @@ export default function MapView({ city, cityInfo }) {
           onViewStateChange={({ viewState: newViewState }) => setViewState(newViewState)}
           controller={true}
           layers={layers}
-          getTooltip={({object}) => object && (
-            `Cell: ${object.properties.grid_id}
-LST: ${object.properties.lst_mean.toFixed(1)}°C
-Tier: ${object.properties.tier.toUpperCase()}
-Vegetation: ${(object.properties.frac_vegetation * 100).toFixed(1)}%`
-          )}
+          getTooltip={({ object }) => {
+            if (!object?.properties) return null;
+            const p = object.properties;
+            const deltaStr = p.delta_above_mean !== undefined
+              ? `${p.delta_above_mean >= 0 ? '+' : ''}${p.delta_above_mean.toFixed(2)}°C vs city mean`
+              : (overview?.mean_lst_c ? `${(p.lst_mean - overview.mean_lst_c >= 0 ? '+' : '')}${(p.lst_mean - overview.mean_lst_c).toFixed(2)}°C vs city mean` : '');
+            return (
+              `Cell: ${p.grid_id}
+LST: ${p.lst_mean.toFixed(1)}°C ${deltaStr ? `(${deltaStr})` : ''}
+Tier: ${p.tier?.toUpperCase()} (Relative Anomaly)
+Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
+            );
+          }}
         >
           <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
         </DeckGL>
@@ -191,10 +225,10 @@ Vegetation: ${(object.properties.frac_vegetation * 100).toFixed(1)}%`
         </div>
       </div>
 
-      {/* KPI Overlay */}
+      {/* KPI & Legend Instrument Overlay */}
       {overview && (
         <div className="kpi-overlay glass-panel">
-          {/* Subtle but visible MODELLED DATA indicator */}
+          {/* Subtle but visible MODELLED DATA provenance bar */}
           <div className="modelled-data-bar">
             <div className="modelled-data-chip" title="Simulated microclimate data, uncalibrated against live observations">
               <span className="modelled-dot"></span>
@@ -211,46 +245,146 @@ Vegetation: ${(object.properties.frac_vegetation * 100).toFixed(1)}%`
           </div>
 
           <div className="kpi-header">
-            <h3>
-              {overview.city}
-              <button
-                className="info-trigger"
-                onClick={() => setShowLstInfo(true)}
-                aria-label="What does LST mean?"
-              >
-                <Info size={12} />
-              </button>
-            </h3>
-            <span className="badge">{overview.analysis_period}</span>
-          </div>
-
-          <div className="kpi-grid">
-            <div className="kpi-card">
-              <span className="kpi-label">Mean LST</span>
-              <span className="kpi-value">{overview.mean_lst_c.toFixed(1)}°C</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-label">Max LST</span>
-              <span className="kpi-value danger">{overview.max_lst_c.toFixed(1)}°C</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-label">Hotspot Area</span>
-              <span className="kpi-value warning">{overview.hotspot_area_km2.toFixed(1)} km²</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-label">UHI Intensity</span>
-              <span className="kpi-value">+{overview.uhi_intensity_c.toFixed(1)}°C</span>
+            <div className="kpi-title-block">
+              <h3>
+                {overview.city}
+                <button
+                  className="info-trigger"
+                  onClick={() => setShowLstInfo(true)}
+                  aria-label="What does LST mean?"
+                >
+                  <Info size={12} />
+                </button>
+              </h3>
+              <span className="analysis-subtext font-mono">
+                {overview.analysis_period} · {overview.grid_cells?.toLocaleString()} CELLS (500M)
+              </span>
             </div>
           </div>
 
-          <div className="legend">
-            <h4>Heat Tiers</h4>
-            <div className="legend-items">
-              <div className="legend-item"><span className="color-box" style={{background: 'rgb(255, 23, 68)'}}></span> Critical</div>
-              <div className="legend-item"><span className="color-box" style={{background: 'rgb(255, 145, 0)'}}></span> High</div>
-              <div className="legend-item"><span className="color-box" style={{background: 'rgb(255, 214, 0)'}}></span> Moderate</div>
-              <div className="legend-item"><span className="color-box" style={{background: 'rgb(0, 200, 83)'}}></span> Normal</div>
-              <div className="legend-item"><span className="color-box" style={{background: 'rgb(41, 121, 255)'}}></span> Cool</div>
+          {/* Primary Hero Metric: Urban Heat Island Intensity */}
+          <div className="kpi-hero-card">
+            <div className="kpi-hero-header">
+              <span className="kpi-hero-tag">Key Indicator</span>
+              <span className="kpi-hero-scope">Urban Heat Island (UHI) Intensity</span>
+            </div>
+            <div className="kpi-hero-value-row">
+              <span className="kpi-hero-sign font-mono">+</span>
+              <span className="kpi-hero-val font-mono">{overview.uhi_intensity_c.toFixed(1)}</span>
+              <span className="kpi-hero-unit font-mono">°C</span>
+            </div>
+            <p className="kpi-hero-def">
+              Peak localized thermal elevation above citywide baseline ({overview.mean_lst_c.toFixed(1)}°C mean).
+            </p>
+          </div>
+
+          {/* Compact Structured Secondary Metrics */}
+          <div className="kpi-secondary-list">
+            <div className="kpi-secondary-row">
+              <div className="kpi-metric-info">
+                <span className="kpi-metric-name">Baseline Mean LST</span>
+                <span className="kpi-metric-def">Citywide spatial average skin temperature</span>
+              </div>
+              <div className="kpi-metric-value font-mono">
+                {overview.mean_lst_c.toFixed(1)} <span className="kpi-unit">°C</span>
+              </div>
+            </div>
+
+            <div className="kpi-secondary-row">
+              <div className="kpi-metric-info">
+                <span className="kpi-metric-name">Peak Surface LST</span>
+                <span className="kpi-metric-def">Highest single-cell surface hotspot</span>
+              </div>
+              <div className="kpi-metric-value font-mono danger">
+                {overview.max_lst_c.toFixed(1)} <span className="kpi-unit">°C</span>
+              </div>
+            </div>
+
+            <div className="kpi-secondary-row">
+              <div className="kpi-metric-info">
+                <span className="kpi-metric-name">Severe Hotspot Footprint</span>
+                <span className="kpi-metric-def">
+                  Critical &amp; High stress cells ({overview.hotspot_count}{overview.grid_cells ? ` · ${((overview.hotspot_count / overview.grid_cells) * 100).toFixed(1)}%` : ''})
+                </span>
+              </div>
+              <div className="kpi-metric-value font-mono warning">
+                {overview.hotspot_area_km2.toFixed(1)} <span className="kpi-unit">km²</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Horizontal Temperature Gradient Legend */}
+          <div className="heatmap-legend">
+            <div className="legend-header">
+              <div className="legend-title-row">
+                <span className="legend-title">Thermal Anomaly Ramp</span>
+                <span className="legend-unit-tag font-mono">Unit: °C</span>
+              </div>
+              <p className="legend-context">
+                Relative classification calibrated to city baseline mean ({overview.mean_lst_c.toFixed(1)}°C).
+              </p>
+            </div>
+
+            {/* Continuous 5-segment horizontal temperature gradient bar */}
+            <div className="horizontal-gradient-bar" role="img" aria-label="Stepped horizontal temperature ramp from cool to critical">
+              <div className="gradient-segment" style={{ background: '#2C7BB6' }} title={`Cool: < ${(overview.mean_lst_c - 1.5).toFixed(1)}°C (ΔT < -1.5°C)`} />
+              <div className="gradient-segment" style={{ background: '#ABD9E9' }} title={`Normal: ${(overview.mean_lst_c - 1.5).toFixed(1)} to ${overview.mean_lst_c.toFixed(1)}°C (ΔT -1.5 to 0.0°C)`} />
+              <div className="gradient-segment" style={{ background: '#FFFFBF' }} title={`Moderate: ${overview.mean_lst_c.toFixed(1)} to ${(overview.mean_lst_c + 1.5).toFixed(1)}°C (ΔT 0.0 to +1.5°C)`} />
+              <div className="gradient-segment" style={{ background: '#FDAE61' }} title={`High: ${(overview.mean_lst_c + 1.5).toFixed(1)} to ${(overview.mean_lst_c + 3.0).toFixed(1)}°C (ΔT +1.5 to +3.0°C)`} />
+              <div className="gradient-segment" style={{ background: '#D7191C' }} title={`Critical: ≥ ${(overview.mean_lst_c + 3.0).toFixed(1)}°C (ΔT ≥ +3.0°C)`} />
+            </div>
+
+            {/* Actual temperature threshold ticks */}
+            <div className="legend-ticks-row font-mono">
+              <span className="legend-tick tick-left">&lt;{(overview.mean_lst_c - 1.5).toFixed(1)}°</span>
+              <span className="legend-tick tick-q1">{(overview.mean_lst_c - 1.5).toFixed(1)}°</span>
+              <span className="legend-tick tick-center" title="City Baseline Mean">{overview.mean_lst_c.toFixed(1)}°</span>
+              <span className="legend-tick tick-q3">{(overview.mean_lst_c + 1.5).toFixed(1)}°</span>
+              <span className="legend-tick tick-right">≥{(overview.mean_lst_c + 3.0).toFixed(1)}°</span>
+            </div>
+
+            {/* Multi-channel severity tier cards */}
+            <div className="legend-tier-grid">
+              <div className="tier-cell">
+                <div className="tier-pill-head">
+                  <span className="tier-swatch" style={{ background: '#2C7BB6' }}></span>
+                  <span className="tier-name">Cool</span>
+                </div>
+                <span className="tier-delta font-mono">&lt;-1.5°</span>
+                <span className="tier-desc">Sink</span>
+              </div>
+              <div className="tier-cell">
+                <div className="tier-pill-head">
+                  <span className="tier-swatch" style={{ background: '#ABD9E9' }}></span>
+                  <span className="tier-name">Normal</span>
+                </div>
+                <span className="tier-delta font-mono">±0.0°</span>
+                <span className="tier-desc">Baseline</span>
+              </div>
+              <div className="tier-cell">
+                <div className="tier-pill-head">
+                  <span className="tier-swatch" style={{ background: '#FFFFBF' }}></span>
+                  <span className="tier-name">Mod.</span>
+                </div>
+                <span className="tier-delta font-mono">+1.5°</span>
+                <span className="tier-desc">Elevated</span>
+              </div>
+              <div className="tier-cell">
+                <div className="tier-pill-head">
+                  <span className="tier-swatch" style={{ background: '#FDAE61' }}></span>
+                  <span className="tier-name">High</span>
+                </div>
+                <span className="tier-delta font-mono">+3.0°</span>
+                <span className="tier-desc">Stress</span>
+              </div>
+              <div className="tier-cell">
+                <div className="tier-pill-head">
+                  <span className="tier-swatch" style={{ background: '#D7191C' }}></span>
+                  <span className="tier-name">Crit.</span>
+                </div>
+                <span className="tier-delta font-mono">≥+3.0°</span>
+                <span className="tier-desc">Severe</span>
+              </div>
             </div>
           </div>
 

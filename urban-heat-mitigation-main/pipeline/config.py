@@ -318,11 +318,11 @@ HOTSPOT_TIERS = {
 }
 
 TIER_COLORS = {
-    "critical": "#FF1744",
-    "high": "#FF9100",
-    "moderate": "#FFD600",
-    "normal": "#00C853",
-    "cool": "#2979FF",
+    "critical": "#D7191C",
+    "high": "#FDAE61",
+    "moderate": "#FFFFBF",
+    "normal": "#ABD9E9",
+    "cool": "#2C7BB6",
 }
 
 # ─── Intervention Parameters ────────────────────────────────────
