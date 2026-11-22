@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { FlyToInterpolator } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { API_BASE } from '../api';
+import { API_BASE, fetchCityGrid, fetchCityPresets } from '../api';
 import { useTheme } from '../ThemeContext';
 import LstExplainerModal from '../components/LstExplainerModal';
 import MapControls from '../components/MapControls';
@@ -182,28 +182,38 @@ export default function ScenarioView({ city, cityInfo }) {
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [simDurationMs, setSimDurationMs] = useState(null);
 
-  // Load grid geometry and presets when city changes
+  // Load grid geometry and presets when city changes (shared cached fetch)
   useEffect(() => {
     if (!city) return;
 
-    fetch(`${API_BASE}/api/v1/grid?city=${city}`)
-      .then((res) => res.json())
-      .then((data) => setGridData(data))
-      .catch((err) => {
-        console.error('Failed to load grid', err);
-        setStatusMessage({ type: 'error', text: 'Could not load grid geometry for this city.' });
-      });
-
-    fetch(`${API_BASE}/api/v1/scenarios/presets?city=${city}`)
-      .then((res) => res.json())
-      .then((data) => setPresets(data))
-      .catch((err) => console.error('Failed to load presets', err));
+    let cancelled = false;
+    const controller = new AbortController();
 
     // Reset simulation state on city change
     setSimulationResult(null);
     setIntensities(EMPTY_INTENSITIES);
     setActivePresetId(null);
     setStatusMessage(null);
+
+    Promise.all([
+      fetchCityGrid(city, controller.signal),
+      fetchCityPresets(city, controller.signal)
+    ])
+      .then(([grid, presetsData]) => {
+        if (cancelled) return;
+        setGridData(grid);
+        setPresets(presetsData || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Failed to load scenario data', err);
+        setStatusMessage({ type: 'error', text: 'Could not load grid geometry for this city.' });
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [city]);
 
   // Compute cell counts and areas
@@ -333,32 +343,6 @@ export default function ScenarioView({ city, cityInfo }) {
     return map;
   }, [simulationResult]);
 
-  // Merge simulation results back into grid data for the "After" map
-  const afterGridData = useMemo(() => {
-    if (!gridData || !simulationResult?.cell_results) {
-      return gridData;
-    }
-
-    return {
-      ...gridData,
-      features: gridData.features.map((f) => {
-        const sim = cellResultsMap[f.properties.grid_id];
-        if (sim) {
-          return {
-            ...f,
-            properties: {
-              ...f.properties,
-              tier: sim.tier_after,
-              lst_mean: sim.lst_after,
-              delta_t: sim.delta_t
-            }
-          };
-        }
-        return f;
-      })
-    };
-  }, [gridData, simulationResult, cellResultsMap]);
-
   // Compute city baseline minimum for 3D elevation scaling
   const minLst = useMemo(() => {
     if (gridData?.features && gridData.features.length > 0) {
@@ -384,54 +368,106 @@ export default function ScenarioView({ city, cityInfo }) {
 
   const is3D = (viewState?.pitch || 0) > 10;
 
-  // DeckGL Layers
-  const beforeLayer = new GeoJsonLayer({
-    id: 'before-layer',
-    data: gridData,
-    pickable: true,
-    stroked: false,
-    filled: true,
-    extruded: is3D,
-    wireframe: false,
-    getFillColor: (d) => {
-      const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
-      return [...color, 175];
-    },
-    getElevation: (d) => {
-      const lst = d.properties?.lst_mean ?? minLst;
-      const delta = Math.max(0, lst - minLst);
-      return 40 + delta * 110;
-    },
-    transitions: { getElevation: 600, getFillColor: 400 },
-    updateTriggers: {
-      extruded: [is3D],
-      getElevation: [minLst]
-    }
-  });
+  // DeckGL Layers: Memoized to prevent recreation during slider drags.
+  // Re-uses gridData directly without cloning or copying 10k GeoJSON feature objects.
+  const beforeLayer = useMemo(() => {
+    if (!gridData) return null;
+    return new GeoJsonLayer({
+      id: 'before-layer',
+      data: gridData,
+      pickable: true,
+      stroked: false,
+      filled: true,
+      extruded: is3D,
+      wireframe: false,
+      getFillColor: (d) => {
+        const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
+        return [...color, 175];
+      },
+      getElevation: (d) => {
+        const lst = d.properties?.lst_mean ?? minLst;
+        const delta = Math.max(0, lst - minLst);
+        return 40 + delta * 110;
+      },
+      transitions: { getElevation: 600, getFillColor: 400 },
+      updateTriggers: {
+        extruded: [is3D],
+        getElevation: [minLst]
+      }
+    });
+  }, [gridData, is3D, minLst]);
 
-  const afterLayer = new GeoJsonLayer({
-    id: 'after-layer',
-    data: afterGridData,
-    pickable: true,
-    stroked: false,
-    filled: true,
-    extruded: is3D,
-    wireframe: false,
-    getFillColor: (d) => {
-      const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
-      return [...color, 175];
+  const afterLayer = useMemo(() => {
+    if (!gridData) return null;
+    return new GeoJsonLayer({
+      id: 'after-layer',
+      data: gridData,
+      pickable: true,
+      stroked: false,
+      filled: true,
+      extruded: is3D,
+      wireframe: false,
+      getFillColor: (d) => {
+        const sim = cellResultsMap[d.properties.grid_id];
+        const tier = sim ? sim.tier_after : d.properties.tier;
+        const color = TIER_COLORS[tier] || [128, 128, 128];
+        return [...color, 175];
+      },
+      getElevation: (d) => {
+        const sim = cellResultsMap[d.properties.grid_id];
+        const lst = sim ? sim.lst_after : (d.properties?.lst_mean ?? minLst);
+        const delta = Math.max(0, lst - minLst);
+        return 40 + delta * 110;
+      },
+      transitions: { getElevation: 600, getFillColor: 400 },
+      updateTriggers: {
+        extruded: [is3D],
+        getElevation: [minLst, cellResultsMap],
+        getFillColor: [cellResultsMap]
+      }
+    });
+  }, [gridData, is3D, minLst, cellResultsMap]);
+
+  const beforeLayers = useMemo(() => (beforeLayer ? [beforeLayer] : []), [beforeLayer]);
+  const afterLayers = useMemo(() => (afterLayer ? [afterLayer] : []), [afterLayer]);
+
+  // Memoized tooltip formatters
+  const getBeforeTooltip = useCallback(
+    ({ object }) => {
+      if (!object) return null;
+      const tier = object.properties?.tier?.toUpperCase() || 'UNKNOWN';
+      const isHotspot = tier === 'CRITICAL' || tier === 'HIGH';
+      return `Cell: ${object.properties.grid_id}\nLST: ${object.properties.lst_mean?.toFixed(1)}°C (${tier})\nTarget Status: ${
+        isHotspot
+          ? 'Hotspot (Targeted)'
+          : targetScope === 'all'
+          ? 'Targeted (City-wide)'
+          : 'Baseline (Unmodified)'
+      }`;
     },
-    getElevation: (d) => {
-      const lst = d.properties?.lst_mean ?? minLst;
-      const delta = Math.max(0, lst - minLst);
-      return 40 + delta * 110;
+    [targetScope]
+  );
+
+  const getAfterTooltip = useCallback(
+    ({ object }) => {
+      if (!object) return null;
+      const sim = cellResultsMap[object.properties.grid_id];
+      const deltaT = sim?.delta_t ?? 0;
+      const isTargeted = sim && Math.abs(deltaT) > 0.001;
+      const tier = (sim ? sim.tier_after : object.properties?.tier)?.toUpperCase() || 'UNKNOWN';
+      const lst = sim ? sim.lst_after : object.properties?.lst_mean;
+      return `Cell: ${object.properties.grid_id}\nSimulated LST: ${lst?.toFixed(1)}°C (${tier})\nCooling ΔT: ${
+        deltaT < 0 ? deltaT.toFixed(2) + '°C' : '0.00°C'
+      }\nTarget Status: ${
+        isTargeted
+          ? 'Intervention Applied'
+          : targetScope === 'hotspots'
+          ? 'Untargeted (Non-Hotspot)'
+          : 'No Modification'
+      }`;
     },
-    transitions: { getElevation: 600, getFillColor: 400 },
-    updateTriggers: {
-      extruded: [is3D],
-      getElevation: [minLst]
-    }
-  });
+    [cellResultsMap, targetScope]
+  );
 
   // Synchronized camera handler between Before and After maps
   const handleViewStateChange = useCallback(({ viewState: nv }) => {
@@ -768,21 +804,8 @@ export default function ScenarioView({ city, cityInfo }) {
                 viewState={viewState}
                 onViewStateChange={handleViewStateChange}
                 controller={true}
-                layers={[beforeLayer]}
-                getTooltip={({ object }) => {
-                  if (!object) return null;
-                  const tier = object.properties?.tier?.toUpperCase() || 'UNKNOWN';
-                  const isHotspot = tier === 'CRITICAL' || tier === 'HIGH';
-                  return `Cell: ${object.properties.grid_id}
-LST: ${object.properties.lst_mean?.toFixed(1)}°C (${tier})
-Target Status: ${
-                    isHotspot
-                      ? 'Hotspot (Targeted)'
-                      : targetScope === 'all'
-                      ? 'Targeted (City-wide)'
-                      : 'Baseline (Unmodified)'
-                  }`;
-                }}
+                layers={beforeLayers}
+                getTooltip={getBeforeTooltip}
               >
                 <Map
                   {...viewState}
@@ -807,24 +830,8 @@ Target Status: ${
                 viewState={viewState}
                 onViewStateChange={handleViewStateChange}
                 controller={true}
-                layers={[afterLayer]}
-                getTooltip={({ object }) => {
-                  if (!object) return null;
-                  const sim = cellResultsMap[object.properties.grid_id];
-                  const deltaT = sim?.delta_t ?? 0;
-                  const isTargeted = sim && Math.abs(deltaT) > 0.001;
-                  const tier = object.properties?.tier?.toUpperCase() || 'UNKNOWN';
-                  return `Cell: ${object.properties.grid_id}
-Simulated LST: ${object.properties.lst_mean?.toFixed(1)}°C (${tier})
-Cooling ΔT: ${deltaT < 0 ? deltaT.toFixed(2) + '°C' : '0.00°C'}
-Target Status: ${
-                    isTargeted
-                      ? 'Intervention Applied'
-                      : targetScope === 'hotspots'
-                      ? 'Untargeted (Non-Hotspot)'
-                      : 'No Modification'
-                  }`;
-                }}
+                layers={afterLayers}
+                getTooltip={getAfterTooltip}
               >
                 <Map
                   {...viewState}

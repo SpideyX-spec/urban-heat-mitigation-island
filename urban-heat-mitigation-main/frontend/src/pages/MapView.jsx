@@ -13,7 +13,7 @@ import {
   Layers
 } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { API_BASE } from '../api';
+import { API_BASE, fetchCityGrid, fetchCityOverview, fetchCityValidation } from '../api';
 import { useTheme } from '../ThemeContext';
 import LstExplainerModal from '../components/LstExplainerModal';
 import ServerWakingNotice from '../components/ServerWakingNotice';
@@ -97,55 +97,45 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
     if (!city) return;
 
     let cancelled = false;
+    const controller = new AbortController();
 
-    // Reset cell selection on city change
+    // Reset cell selection & state on city change
     setSelectedCell(null);
     setShapData(null);
     setShapError(null);
+    setLoading(true);
+    setError(null);
 
-    const fetchData = async () => {
-      try {
-        const [gridRes, overviewRes, validationRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/grid?city=${city}`),
-          fetch(`${API_BASE}/api/v1/overview?city=${city}`),
-          fetch(`${API_BASE}/api/v1/validation?city=${city}`).catch(() => null)
-        ]);
-
+    // 1. Essential Data (Grid GeoJSON & Summary Overview)
+    Promise.all([
+      fetchCityGrid(city, controller.signal),
+      fetchCityOverview(city, controller.signal)
+    ])
+      .then(([grid, overviewData]) => {
         if (cancelled) return;
+        setGridData(grid);
+        setOverview(overviewData);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Failed to fetch essential map data', err);
+        setError('Could not reach the server. Is the backend running?');
+        setLoading(false);
+      });
 
-        if (gridRes.ok) {
-          const data = await gridRes.json();
-          setGridData(data);
-        }
+    // 2. Non-blocking Optional Satellite Validation
+    fetchCityValidation(city, controller.signal)
+      .then((valData) => {
+        if (!cancelled) setValidation(valData);
+      })
+      .catch(() => {
+        if (!cancelled) setValidation(null);
+      });
 
-        if (overviewRes.ok) {
-          const data = await overviewRes.json();
-          setOverview(data);
-        }
-
-        if (validationRes && validationRes.ok) {
-          const data = await validationRes.json();
-          setValidation(data);
-        } else {
-          setValidation(null);
-        }
-
-        if (!gridRes.ok || !overviewRes.ok) {
-          setError('Could not load data for this city.');
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Failed to fetch data', err);
-          setError('Could not reach the server. Is the backend running?');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchData();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [city]);
 
@@ -331,6 +321,41 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
     return 0;
   }, [selectedCell, overview]);
 
+  // Memoized handlers for DeckGL to avoid unnecessary layer/controller recreation
+  const handleViewStateChange = useCallback(({ viewState: newViewState }) => {
+    setViewState(newViewState);
+  }, []);
+
+  const handleMapClick = useCallback(
+    (info) => {
+      if (info?.object?.properties) {
+        handleSelectCell(info.object.properties);
+      }
+    },
+    [handleSelectCell]
+  );
+
+  const getTooltip = useCallback(
+    ({ object }) => {
+      if (!object?.properties) return null;
+      const p = object.properties;
+      const delta =
+        p.delta_above_mean !== undefined
+          ? p.delta_above_mean
+          : overview?.mean_lst_c
+          ? p.lst_mean - overview.mean_lst_c
+          : 0;
+      const deltaStr = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}°C vs city mean`;
+      const tierStr = p.tier?.toUpperCase() || 'NORMAL';
+
+      return `Cell: ${p.grid_id}
+LST: ${p.lst_mean.toFixed(1)}°C (${deltaStr})
+Tier: ${tierStr}
+Click to pin local SHAP drivers`;
+    },
+    [overview]
+  );
+
   return (
     <div className="map-view-container animate-fade-in">
       <div className="map-wrapper">
@@ -348,31 +373,11 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
 
         <DeckGL
           viewState={viewState}
-          onViewStateChange={({ viewState: newViewState }) => setViewState(newViewState)}
+          onViewStateChange={handleViewStateChange}
           controller={true}
           layers={layers}
-          onClick={(info) => {
-            if (info?.object?.properties) {
-              handleSelectCell(info.object.properties);
-            }
-          }}
-          getTooltip={({ object }) => {
-            if (!object?.properties) return null;
-            const p = object.properties;
-            const delta =
-              p.delta_above_mean !== undefined
-                ? p.delta_above_mean
-                : overview?.mean_lst_c
-                ? p.lst_mean - overview.mean_lst_c
-                : 0;
-            const deltaStr = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}°C vs city mean`;
-            const tierStr = p.tier?.toUpperCase() || 'NORMAL';
-
-            return `Cell: ${p.grid_id}
-LST: ${p.lst_mean.toFixed(1)}°C (${deltaStr})
-Tier: ${tierStr}
-Click to pin local SHAP drivers`;
-          }}
+          onClick={handleMapClick}
+          getTooltip={getTooltip}
         >
           <Map
             mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}

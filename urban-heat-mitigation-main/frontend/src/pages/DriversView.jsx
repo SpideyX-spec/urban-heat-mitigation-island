@@ -25,7 +25,12 @@ import {
   CheckCircle2,
   Info
 } from 'lucide-react';
-import { API_BASE } from '../api';
+import {
+  API_BASE,
+  fetchCityDrivers,
+  fetchCityHotspotDrivers,
+  fetchCityDependence
+} from '../api';
 import './DriversView.css';
 
 // ─── Comprehensive Feature Dictionary ───────────────────────────
@@ -213,38 +218,36 @@ export default function DriversView({ city, cityInfo }) {
     if (!city) return;
 
     let cancelled = false;
+    const controller = new AbortController();
 
     const fetchExplainabilityData = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const [driversRes, hotspotRes, dependenceRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/drivers?city=${city}`),
-          fetch(`${API_BASE}/api/v1/drivers/hotspot-drivers?city=${city}`).catch(() => null),
-          fetch(`${API_BASE}/api/v1/drivers/dependence?city=${city}`).catch(() => null)
+        const [driversData, hotspotData, depData] = await Promise.all([
+          fetchCityDrivers(city, controller.signal),
+          fetchCityHotspotDrivers(city, controller.signal),
+          fetchCityDependence(city, controller.signal)
         ]);
 
         if (cancelled) return;
 
-        if (driversRes.ok) {
-          const data = await driversRes.json();
-          setGlobalImportance(data.global_importance || []);
-          if (data.global_importance?.length > 0 && !selectedFeatureKey) {
-            setSelectedFeatureKey(data.global_importance[0].feature);
+        if (driversData?.global_importance) {
+          setGlobalImportance(driversData.global_importance || []);
+          if (driversData.global_importance.length > 0 && !selectedFeatureKey) {
+            setSelectedFeatureKey(driversData.global_importance[0].feature);
           }
         } else {
           setError('Could not load global feature importance data.');
         }
 
-        if (hotspotRes && hotspotRes.ok) {
-          const data = await hotspotRes.json();
-          setHotspotDrivers(data.hotspot_drivers || []);
+        if (hotspotData?.hotspot_drivers) {
+          setHotspotDrivers(hotspotData.hotspot_drivers);
         }
 
-        if (dependenceRes && dependenceRes.ok) {
-          const data = await dependenceRes.json();
-          setDependenceData(data.features || {});
+        if (depData?.features) {
+          setDependenceData(depData.features);
         }
       } catch (err) {
         if (!cancelled) {
@@ -259,6 +262,7 @@ export default function DriversView({ city, cityInfo }) {
     fetchExplainabilityData();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [city]);
 
