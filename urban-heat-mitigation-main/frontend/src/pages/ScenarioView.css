@@ -782,24 +782,333 @@
 .text-success { color: var(--tier-cool); }
 .text-warning { color: var(--tier-high); }
 
-/* Responsive adjustments */
+/* ─── Mobile Comparison Toggle & Bottom Sheet Controls ───────── */
+.scenario-mobile-compare-toggle {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+  box-shadow: var(--shadow-sm);
+  max-width: calc(100vw - 24px);
+}
+
+.compare-toggle-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-2);
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.compare-toggle-tab:hover {
+  color: var(--text-1);
+}
+
+.compare-toggle-tab.active {
+  background: var(--surface-3);
+  color: var(--text-1);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.compare-tag-dot {
+  font-size: 9.5px;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--tier-cool);
+  border: 1px solid var(--line);
+}
+
+/* Mobile Builder Floating Bottom Bar */
+.mobile-builder-bottom-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.builder-drawer-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-1);
+}
+
+.drawer-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.drawer-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.drawer-sub {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drawer-chevron {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.drawer-quick-simulate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: var(--text-1);
+  color: var(--canvas);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease;
+}
+
+.drawer-quick-simulate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Mobile Bottom Sheet */
+.bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 95;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.mobile-sheet-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  position: relative;
+  width: 100%;
+}
+
+.mobile-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+  margin: 0 auto;
+}
+
+.mobile-sheet-close {
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  position: absolute;
+  right: 0;
+  top: -2px;
+}
+
+.mobile-sheet-close:hover {
+  color: var(--text-1);
+  background: var(--surface-2);
+}
+
+/* ─── Touchscreen Optimization for Range Sliders ───────────────── */
+@media (hover: none) and (pointer: coarse), (max-width: 900px) {
+  .range-slider {
+    height: 32px;
+  }
+  .range-slider::-webkit-slider-thumb {
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    margin-top: -8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+  .range-slider::-moz-range-thumb {
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+  }
+  .btn-simulate,
+  .btn-reset,
+  .btn-preset {
+    min-height: 40px;
+  }
+}
+
+/* ─── Responsive Layout Adjustments ────────────────────────────── */
 @media (max-width: 900px) {
-  .scenario-layout {
+  .scenario-layout.is-mobile-layout {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .results-panel.mobile-results {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
     flex-direction: column;
   }
-  .builder-panel {
+
+  .mobile-single-map {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .scenario-map-controls.mobile-controls {
+    top: 56px;
+    right: 12px;
+    z-index: 20;
+  }
+
+  .scenario-map-attribution.mobile-attribution {
+    bottom: 56px;
+    right: 10px;
+    z-index: 15;
+  }
+
+  /* Bottom sheet modal for Scenario Builder */
+  .builder-panel.mobile-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     width: 100%;
     min-width: 100%;
-    height: 380px;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
+    max-width: 100vw;
+    height: auto;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--line-strong);
+    border-bottom: none;
+    box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    padding: 12px 16px 36px;
+    animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .split-maps {
-    flex-direction: column;
+
+  /* Compact summary docked above the bottom bar on mobile */
+  .results-summary.mobile-summary {
+    position: absolute;
+    bottom: 58px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    width: auto;
+    max-width: calc(100vw - 24px);
+    padding: 6px 12px;
+    gap: 8px;
+    justify-content: space-around;
+    z-index: 22;
   }
-  .map-half {
-    height: 50%;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
+
+  .results-summary.mobile-summary .result-metric {
+    align-items: center;
+  }
+
+  .results-summary.mobile-summary .metric-label {
+    font-size: 8.5px;
+    margin-bottom: 0;
+  }
+
+  .results-summary.mobile-summary .metric-value {
+    font-size: 13.5px;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+}
+
+@media (max-width: 380px) {
+  .compare-toggle-tab {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+  .mobile-builder-bottom-bar {
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    padding: 6px 10px;
+  }
+  .drawer-title {
+    font-size: 11px;
+  }
+  .drawer-sub {
+    font-size: 9px;
+  }
+  .results-summary.mobile-summary {
+    bottom: 52px;
+    left: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    gap: 4px;
+  }
+  .results-summary.mobile-summary .metric-value {
+    font-size: 12px;
   }
 }

@@ -83,3 +83,10 @@
   border-radius: 2px;
   border: 1px solid var(--line-strong);
 }
+
+@media (max-width: 768px) {
+  .map-ctrl-btn {
+    width: 36px;
+    height: 36px;
+  }
+}

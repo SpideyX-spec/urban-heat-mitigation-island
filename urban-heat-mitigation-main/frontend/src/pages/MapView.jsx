@@ -10,7 +10,9 @@ import {
   ArrowDownRight,
   RefreshCw,
   Sparkles,
-  Layers
+  Layers,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE, fetchCityGrid, fetchCityOverview, fetchCityValidation } from '../api';
@@ -92,6 +94,20 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
   const [shapLoading, setShapLoading] = useState(false);
   const [shapError, setShapError] = useState(null);
   const shapCacheRef = useRef({});
+
+  // Responsive state
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768
+  );
+  const [isMobileKpiOpen, setIsMobileKpiOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!city) return;
@@ -392,13 +408,17 @@ Click to pin local SHAP drivers`;
           onViewStateChange={setViewState}
         />
 
-        {/* Pinned Cell Inspection Panel (Docked at Left below map controls) */}
+        {/* Pinned Cell Inspection Panel (Docked at Left below map controls / Mobile Bottom Sheet) */}
         {selectedCell && (
           <aside
-            className="cell-inspector-panel glass-panel animate-fade-in"
+            className={`cell-inspector-panel glass-panel animate-fade-in ${
+              isMobile ? 'mobile-sheet' : ''
+            }`}
             role="region"
             aria-label={`Inspection details for cell ${selectedCell.grid_id}`}
           >
+            {isMobile && <div className="mobile-sheet-handle" />}
+
             {/* Header with Cell ID, Tier Badge & Close Button */}
             <div className="inspector-header">
               <div className="inspector-title-line">
@@ -547,6 +567,25 @@ Click to pin local SHAP drivers`;
           </aside>
         )}
 
+        {/* Floating Mobile Overview Trigger Pill */}
+        {isMobile && overview && !isMobileKpiOpen && !selectedCell && (
+          <button
+            type="button"
+            className="mobile-kpi-pill glass-panel animate-fade-in"
+            onClick={() => setIsMobileKpiOpen(true)}
+            aria-label="View city thermal metrics"
+          >
+            <span className="pill-pulse-dot" />
+            <span className="pill-uhi-label font-mono">
+              UHI +{overview.uhi_intensity_c.toFixed(1)}°C
+            </span>
+            <span className="pill-tier-tag font-mono">
+              {overview.hotspot_count} hotspots
+            </span>
+            <ChevronUp size={13} className="pill-chevron" />
+          </button>
+        )}
+
         {/* Bottom Left: Map Provenance Watermark and Required Map Attributions */}
         <div className="map-footer-left">
           <div className="map-watermark-provenance">
@@ -557,10 +596,36 @@ Click to pin local SHAP drivers`;
         </div>
       </div>
 
-      {/* KPI & Legend Instrument Overlay */}
-      {overview && (
-        <div className="kpi-overlay glass-panel">
-          {/* Subtle but visible MODELLED DATA provenance bar */}
+      {/* KPI & Legend Instrument Overlay / Responsive Bottom Sheet */}
+      {overview && (!isMobile || isMobileKpiOpen) && (
+        <>
+          {isMobile && (
+            <div
+              className="mobile-sheet-backdrop"
+              onClick={() => setIsMobileKpiOpen(false)}
+              aria-hidden="true"
+            />
+          )}
+          <div
+            className={`kpi-overlay glass-panel ${
+              isMobile ? 'mobile-sheet animate-fade-in' : ''
+            }`}
+          >
+            {isMobile && (
+              <div className="mobile-sheet-top-bar">
+                <div className="mobile-sheet-handle" />
+                <button
+                  type="button"
+                  className="mobile-sheet-close"
+                  onClick={() => setIsMobileKpiOpen(false)}
+                  aria-label="Dismiss metrics sheet"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
+            {/* Subtle but visible MODELLED DATA provenance bar */}
           <div className="modelled-data-bar">
             <div
               className="modelled-data-chip"
@@ -758,6 +823,7 @@ Click to pin local SHAP drivers`;
             onOpenMethodology={onOpenMethodology || (() => setShowMethodology(true))}
           />
         </div>
+        </>
       )}
 
       {showLstInfo && <LstExplainerModal onClose={() => setShowLstInfo(false)} />}

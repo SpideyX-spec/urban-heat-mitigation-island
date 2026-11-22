@@ -315,6 +315,34 @@ function App() {
         )}
       </main>
 
+      {/* Mobile Bottom Navigation Bar (Active on screens <= 640px) */}
+      <nav className="mobile-bottom-nav" role="navigation" aria-label="Mobile Primary Navigation">
+        <NavLink
+          to={`/${activeCityId}/map`}
+          className={() => `mobile-nav-tab${currentView === 'map' ? ' active' : ''}`}
+          end
+        >
+          <Map size={18} aria-hidden="true" />
+          <span>Heat Map</span>
+        </NavLink>
+
+        <NavLink
+          to={`/${activeCityId}/drivers`}
+          className={() => `mobile-nav-tab${currentView === 'drivers' ? ' active' : ''}`}
+        >
+          <BarChart2 size={18} aria-hidden="true" />
+          <span>Heat Drivers</span>
+        </NavLink>
+
+        <NavLink
+          to={`/${activeCityId}/scenarios`}
+          className={() => `mobile-nav-tab${currentView === 'scenarios' ? ' active' : ''}`}
+        >
+          <Layers size={18} aria-hidden="true" />
+          <span>Scenarios</span>
+        </NavLink>
+      </nav>
+
       {/* Global Modals & Drawers */}
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
       <MethodologyDrawer

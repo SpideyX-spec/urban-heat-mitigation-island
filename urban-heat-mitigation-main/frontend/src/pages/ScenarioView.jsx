@@ -19,7 +19,8 @@ import {
   AlertTriangle,
   Sliders,
   Layers,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { FlyToInterpolator } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -182,6 +183,21 @@ export default function ScenarioView({ city, cityInfo }) {
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [simDurationMs, setSimDurationMs] = useState(null);
 
+  // Responsive state for mobile layout & comparison
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 900
+  );
+  const [mobileCompareMode, setMobileCompareMode] = useState('after'); // 'before' | 'after'
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 900);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Load grid geometry and presets when city changes (shared cached fetch)
   useEffect(() => {
     if (!city) return;
@@ -286,6 +302,10 @@ export default function ScenarioView({ city, cityInfo }) {
             type: 'success',
             text: `Simulation complete in ${elapsed}ms: ${data.summary.cells_modified} cells re-evaluated.`
           });
+          if (isMobile) {
+            setMobileCompareMode('after');
+            setIsBottomSheetOpen(false);
+          }
         } else {
           const errBody = await res.json().catch(() => ({}));
           setStatusMessage({
@@ -516,322 +536,459 @@ export default function ScenarioView({ city, cityInfo }) {
 
   const hasActiveIntervention = Object.values(intensities).some((v) => v > 0);
 
-  return (
-    <div className="page-container animate-fade-in">
-      <div className="scenario-layout">
-        {/* Left Panel: Scenario Builder & Parameter Tuning */}
-        <div className="builder-panel glass-panel">
-          <div className="panel-header">
-            <div className="panel-title-row">
-              <Sliders size={16} className="panel-icon" />
-              <h2>Scenario Builder</h2>
-            </div>
-            <p className="panel-description">
-              Simulate cooling intervention scenarios for{' '}
-              <strong>{cityInfo?.name || city}</strong>. Modifies ML feature inputs to re-predict
-              Land Surface Temperature.
-            </p>
-          </div>
+  // Common Builder Content (Rendered in desktop sidebar or mobile bottom sheet)
+  const renderBuilderContent = () => (
+    <>
+      <div className="panel-header">
+        <div className="panel-title-row">
+          <Sliders size={16} className="panel-icon" />
+          <h2>Scenario Builder</h2>
+        </div>
+        <p className="panel-description">
+          Simulate cooling intervention scenarios for{' '}
+          <strong>{cityInfo?.name || city}</strong>. Modifies ML feature inputs to re-predict
+          Land Surface Temperature.
+        </p>
+      </div>
 
-          {/* Explicit Targeting Control */}
-          <div className="targeting-card">
-            <div className="targeting-header">
-              <Target size={14} className="targeting-icon" />
-              <span className="targeting-title">Spatial Targeting</span>
-              <span className="targeting-badge font-mono">
-                {activeTargetCount} cells · ~{activeTargetAreaKm2} km²
-              </span>
-            </div>
-
-            <div className="targeting-toggle-group">
-              <button
-                type="button"
-                className={`target-btn ${targetScope === 'hotspots' ? 'active' : ''}`}
-                onClick={() => setTargetScope('hotspots')}
-              >
-                <div className="target-btn-title">Hotspots Only</div>
-                <div className="target-btn-sub">Critical & High Tiers</div>
-              </button>
-
-              <button
-                type="button"
-                className={`target-btn ${targetScope === 'all' ? 'active' : ''}`}
-                onClick={() => setTargetScope('all')}
-              >
-                <div className="target-btn-title">Entire City</div>
-                <div className="target-btn-sub">All Grid Cells</div>
-              </button>
-            </div>
-
-            <p className="targeting-explanation">
-              {targetScope === 'hotspots' ? (
-                <>
-                  Applies interventions strictly to <strong>{hotspotsCount} hotspot cells</strong> (~
-                  {hotspotsAreaKm2} km²) where baseline LST exceeds <code>Mean + 1σ</code>. Moderate
-                  and cool cells remain unchanged, optimizing municipal cost efficiency.
-                </>
-              ) : (
-                <>
-                  Applies interventions uniformly across all <strong>{totalCellsCount} grid cells</strong> (~
-                  {totalAreaKm2} km²) within urban bounds. Models widespread city-wide infrastructure
-                  deployment at higher capital cost.
-                </>
-              )}
-            </p>
-          </div>
-
-          {/* Intervention Sliders Container */}
-          <div className="sliders-section">
-            <div className="section-title-row">
-              <span className="section-title">Intervention Parameters</span>
-              <span className="section-note font-mono">0% to 100% Intensity</span>
-            </div>
-
-            <div className="sliders-container">
-              {INTERVENTIONS_CONFIG.map((inv) => {
-                const IconComp = inv.icon;
-                const value = intensities[inv.id] || 0;
-                const pct = Math.round(value * 100);
-                const isExpanded = expandedExplanation === inv.id;
-                const physicalShift = inv.getPhysicalShift(value);
-
-                return (
-                  <div key={inv.id} className={`slider-group ${value > 0 ? 'active-slider' : ''}`}>
-                    <div className="slider-header">
-                      <div className="slider-title-line">
-                        <span className="icon">
-                          <IconComp size={14} />
-                        </span>
-                        <span className="name">{inv.label}</span>
-                        <span className="value font-mono">{pct}%</span>
-                      </div>
-
-                      {/* Real-time Physical Input Change Readout */}
-                      <div className="physical-shift-readout font-mono">
-                        <span className="shift-label">Input Shift:</span>
-                        <span className={`shift-value ${value > 0 ? 'text-accent' : ''}`}>
-                          {physicalShift}
-                        </span>
-                      </div>
-                    </div>
-
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={value}
-                      onChange={(e) => handleSliderChange(inv.id, e.target.value)}
-                      className="range-slider"
-                      aria-label={`${inv.label} intensity`}
-                    />
-
-                    <div className="slider-footer">
-                      <button
-                        type="button"
-                        className="toggle-explanation-btn"
-                        onClick={() => setExpandedExplanation(isExpanded ? null : inv.id)}
-                        aria-expanded={isExpanded}
-                      >
-                        <HelpCircle size={11} />
-                        <span>What do 0%, 50%, 100% mean?</span>
-                        {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                      </button>
-                    </div>
-
-                    {/* Explanatory Benchmark Matrix */}
-                    {isExpanded && (
-                      <div className="benchmark-matrix animate-fade-in">
-                        <div className="benchmark-tagline">{inv.tagline}</div>
-                        <div className="benchmark-features">
-                          <strong>Model Features:</strong> <code>{inv.modelFeatures}</code>
-                        </div>
-                        <div className="benchmark-list">
-                          {inv.benchmarks.map((b) => (
-                            <div key={b.pct} className="benchmark-item">
-                              <span className="benchmark-pct font-mono">{b.pct}</span>
-                              <div className="benchmark-content">
-                                <strong>{b.title}</strong>
-                                <span>{b.detail}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="actions-group">
-            <button
-              className="btn-simulate"
-              onClick={runSimulation}
-              disabled={isSimulating || !hasActiveIntervention}
-              title={
-                !hasActiveIntervention
-                  ? 'Adjust at least one slider above 0% to run simulation'
-                  : undefined
-              }
-            >
-              {isSimulating ? (
-                <>
-                  <RefreshCw size={14} className="spin-icon" />
-                  <span>Re-Predicting ({activeTargetCount} Cells)...</span>
-                </>
-              ) : (
-                <>
-                  <Play size={13} className="btn-icon" />
-                  <span>Run Simulation</span>
-                </>
-              )}
-            </button>
-
-            <button
-              className="btn-reset"
-              onClick={handleResetSliders}
-              disabled={isSimulating || !hasActiveIntervention}
-              title="Reset all sliders to baseline (0%)"
-            >
-              <RotateCcw size={13} />
-              <span>Reset</span>
-            </button>
-          </div>
-
-          {/* Status Message */}
-          {statusMessage && (
-            <div className={`status-message status-${statusMessage.type} animate-fade-in`}>
-              {statusMessage.text}
-            </div>
-          )}
-
-          {/* Presets Section */}
-          <div className="presets-section">
-            <div className="presets-header">
-              <Sparkles size={12} className="presets-icon" />
-              <h3>Scenario Presets</h3>
-            </div>
-            <div className="preset-buttons">
-              {presets.map((p) => (
-                <button
-                  key={p.scenario_id}
-                  onClick={() => loadPreset(p)}
-                  className={`btn-preset ${activePresetId === p.scenario_id ? 'active' : ''}`}
-                  disabled={isSimulating}
-                >
-                  <div className="preset-btn-top">
-                    <span className="preset-name">{p.name}</span>
-                    {p.mean_cooling_c !== undefined && p.mean_cooling_c !== 0 && (
-                      <span className="preset-cooling font-mono">
-                        {p.mean_cooling_c.toFixed(1)}°C
-                      </span>
-                    )}
-                  </div>
-                  {p.description && <div className="preset-desc">{p.description}</div>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Assumptions & Model Limitations Disclosure */}
-          <div className="assumptions-card">
-            <button
-              type="button"
-              className="assumptions-toggle"
-              onClick={() => setShowAssumptions(!showAssumptions)}
-              aria-expanded={showAssumptions}
-            >
-              <AlertTriangle size={13} className="assumptions-icon" />
-              <span>Assumptions & Model Limitations</span>
-              {showAssumptions ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-
-            {showAssumptions && (
-              <div className="assumptions-content animate-fade-in">
-                <ul>
-                  <li>
-                    <strong>Statistical Surrogate (Not CFD):</strong> Predictions are computed by an
-                    XGBoost regression model trained on satellite observations, not a physics-based
-                    fluid dynamic or thermal microclimate simulation.
-                  </li>
-                  <li>
-                    <strong>Land Surface Temperature (LST):</strong> Results represent radiometric
-                    surface skin temperature (e.g. roofs/asphalt), not 2-meter ambient air
-                    temperature. Air cooling is typically lower and moderated by atmospheric mixing.
-                  </li>
-                  <li>
-                    <strong>Instantaneous Implementation:</strong> Simulates mature canopy density
-                    and fully completed infrastructure without accounting for multi-year growth or
-                    construction phases.
-                  </li>
-                  <li>
-                    <strong>Zero Spatial Advection:</strong> Grid cells are evaluated independently;
-                    lateral thermal advection between neighboring cells is not modeled.
-                  </li>
-                </ul>
-              </div>
-            )}
-          </div>
+      {/* Explicit Targeting Control */}
+      <div className="targeting-card">
+        <div className="targeting-header">
+          <Target size={14} className="targeting-icon" />
+          <span className="targeting-title">Spatial Targeting</span>
+          <span className="targeting-badge font-mono">
+            {activeTargetCount} cells · ~{activeTargetAreaKm2} km²
+          </span>
         </div>
 
-        {/* Right Panel: Synchronized Split Maps & Results Summary */}
-        <div className="results-panel">
-          {/* Synchronized Field Atlas Map Controls (Top-Right of results panel) */}
-          <MapControls
-            className="scenario-map-controls"
-            viewState={viewState}
-            onViewStateChange={setViewState}
-          />
+        <div className="targeting-toggle-group">
+          <button
+            type="button"
+            className={`target-btn ${targetScope === 'hotspots' ? 'active' : ''}`}
+            onClick={() => setTargetScope('hotspots')}
+          >
+            <div className="target-btn-title">Hotspots Only</div>
+            <div className="target-btn-sub">Critical & High Tiers</div>
+          </button>
 
-          <div className="split-maps">
-            {/* Before Map */}
-            <div className="map-half">
-              <div className="map-label">
-                <span>Before (Baseline)</span>
-                <button
-                  className="info-trigger"
-                  onClick={() => setShowLstInfo(true)}
-                  aria-label="What does LST mean?"
-                >
-                  <Info size={12} />
-                </button>
-              </div>
-              <DeckGL
-                id="deckgl-before"
-                viewState={viewState}
-                onViewStateChange={handleViewStateChange}
-                controller={true}
-                layers={beforeLayers}
-                getTooltip={getBeforeTooltip}
-              >
-                <Map
-                  {...viewState}
-                  mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
-                  attributionControl={false}
+          <button
+            type="button"
+            className={`target-btn ${targetScope === 'all' ? 'active' : ''}`}
+            onClick={() => setTargetScope('all')}
+          >
+            <div className="target-btn-title">Entire City</div>
+            <div className="target-btn-sub">All Grid Cells</div>
+          </button>
+        </div>
+
+        <p className="targeting-explanation">
+          {targetScope === 'hotspots' ? (
+            <>
+              Applies interventions strictly to <strong>{hotspotsCount} hotspot cells</strong> (~
+              {hotspotsAreaKm2} km²) where baseline LST exceeds <code>Mean + 1σ</code>. Moderate
+              and cool cells remain unchanged, optimizing municipal cost efficiency.
+            </>
+          ) : (
+            <>
+              Applies interventions uniformly across all <strong>{totalCellsCount} grid cells</strong> (~
+              {totalAreaKm2} km²) within urban bounds. Models widespread city-wide infrastructure
+              deployment at higher capital cost.
+            </>
+          )}
+        </p>
+      </div>
+
+      {/* Intervention Sliders Container */}
+      <div className="sliders-section">
+        <div className="section-title-row">
+          <span className="section-title">Intervention Parameters</span>
+          <span className="section-note font-mono">0% to 100% Intensity</span>
+        </div>
+
+        <div className="sliders-container">
+          {INTERVENTIONS_CONFIG.map((inv) => {
+            const IconComp = inv.icon;
+            const value = intensities[inv.id] || 0;
+            const pct = Math.round(value * 100);
+            const isExpanded = expandedExplanation === inv.id;
+            const physicalShift = inv.getPhysicalShift(value);
+
+            return (
+              <div key={inv.id} className={`slider-group ${value > 0 ? 'active-slider' : ''}`}>
+                <div className="slider-header">
+                  <div className="slider-title-line">
+                    <span className="icon">
+                      <IconComp size={14} />
+                    </span>
+                    <span className="name">{inv.label}</span>
+                    <span className="value font-mono">{pct}%</span>
+                  </div>
+
+                  {/* Real-time Physical Input Change Readout */}
+                  <div className="physical-shift-readout font-mono">
+                    <span className="shift-label">Input Shift:</span>
+                    <span className={`shift-value ${value > 0 ? 'text-accent' : ''}`}>
+                      {physicalShift}
+                    </span>
+                  </div>
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={value}
+                  onChange={(e) => handleSliderChange(inv.id, e.target.value)}
+                  className="range-slider"
+                  aria-label={`${inv.label} intensity`}
                 />
-              </DeckGL>
-            </div>
 
-            {/* After Map */}
-            <div className="map-half">
-              <div className="map-label">
-                <span>After (Scenario Simulation)</span>
-                {simulationResult && (
-                  <span className="map-sim-tag font-mono">
-                    {simulationResult.summary.cells_modified} cells
+                <div className="slider-footer">
+                  <button
+                    type="button"
+                    className="toggle-explanation-btn"
+                    onClick={() => setExpandedExplanation(isExpanded ? null : inv.id)}
+                    aria-expanded={isExpanded}
+                  >
+                    <HelpCircle size={11} />
+                    <span>What do 0%, 50%, 100% mean?</span>
+                    {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                  </button>
+                </div>
+
+                {/* Explanatory Benchmark Matrix */}
+                {isExpanded && (
+                  <div className="benchmark-matrix animate-fade-in">
+                    <div className="benchmark-tagline">{inv.tagline}</div>
+                    <div className="benchmark-features">
+                      <strong>Model Features:</strong> <code>{inv.modelFeatures}</code>
+                    </div>
+                    <div className="benchmark-list">
+                      {inv.benchmarks.map((b) => (
+                        <div key={b.pct} className="benchmark-item">
+                          <span className="benchmark-pct font-mono">{b.pct}</span>
+                          <div className="benchmark-content">
+                            <strong>{b.title}</strong>
+                            <span>{b.detail}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="actions-group">
+        <button
+          className="btn-simulate"
+          onClick={runSimulation}
+          disabled={isSimulating || !hasActiveIntervention}
+          title={
+            !hasActiveIntervention
+              ? 'Adjust at least one slider above 0% to run simulation'
+              : undefined
+          }
+        >
+          {isSimulating ? (
+            <>
+              <RefreshCw size={14} className="spin-icon" />
+              <span>Re-Predicting ({activeTargetCount} Cells)...</span>
+            </>
+          ) : (
+            <>
+              <Play size={13} className="btn-icon" />
+              <span>Run Simulation</span>
+            </>
+          )}
+        </button>
+
+        <button
+          className="btn-reset"
+          onClick={handleResetSliders}
+          disabled={isSimulating || !hasActiveIntervention}
+          title="Reset all sliders to baseline (0%)"
+        >
+          <RotateCcw size={13} />
+          <span>Reset</span>
+        </button>
+      </div>
+
+      {/* Status Message */}
+      {statusMessage && (
+        <div className={`status-message status-${statusMessage.type} animate-fade-in`}>
+          {statusMessage.text}
+        </div>
+      )}
+
+      {/* Presets Section */}
+      <div className="presets-section">
+        <div className="presets-header">
+          <Sparkles size={12} className="presets-icon" />
+          <h3>Scenario Presets</h3>
+        </div>
+        <div className="preset-buttons">
+          {presets.map((p) => (
+            <button
+              key={p.scenario_id}
+              onClick={() => loadPreset(p)}
+              className={`btn-preset ${activePresetId === p.scenario_id ? 'active' : ''}`}
+              disabled={isSimulating}
+            >
+              <div className="preset-btn-top">
+                <span className="preset-name">{p.name}</span>
+                {p.mean_cooling_c !== undefined && p.mean_cooling_c !== 0 && (
+                  <span className="preset-cooling font-mono">
+                    {p.mean_cooling_c.toFixed(1)}°C
                   </span>
                 )}
               </div>
+              {p.description && <div className="preset-desc">{p.description}</div>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Assumptions & Model Limitations Disclosure */}
+      <div className="assumptions-card">
+        <button
+          type="button"
+          className="assumptions-toggle"
+          onClick={() => setShowAssumptions(!showAssumptions)}
+          aria-expanded={showAssumptions}
+        >
+          <AlertTriangle size={13} className="assumptions-icon" />
+          <span>Assumptions & Model Limitations</span>
+          {showAssumptions ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </button>
+
+        {showAssumptions && (
+          <div className="assumptions-content animate-fade-in">
+            <ul>
+              <li>
+                <strong>Statistical Surrogate (Not CFD):</strong> Predictions are computed by an
+                XGBoost regression model trained on satellite observations, not a physics-based
+                fluid dynamic or thermal microclimate simulation.
+              </li>
+              <li>
+                <strong>Land Surface Temperature (LST):</strong> Results represent radiometric
+                surface skin temperature (e.g. roofs/asphalt), not 2-meter ambient air
+                temperature. Air cooling is typically lower and moderated by atmospheric mixing.
+              </li>
+              <li>
+                <strong>Instantaneous Implementation:</strong> Simulates mature canopy density
+                and fully completed infrastructure without accounting for multi-year growth or
+                construction phases.
+              </li>
+              <li>
+                <strong>Zero Spatial Advection:</strong> Grid cells are evaluated independently;
+                lateral thermal advection between neighboring cells is not modeled.
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="page-container animate-fade-in">
+      <div className={`scenario-layout ${isMobile ? 'is-mobile-layout' : ''}`}>
+        {/* Desktop Left Panel: Scenario Builder & Parameter Tuning */}
+        {!isMobile && (
+          <div className="builder-panel glass-panel">
+            {renderBuilderContent()}
+          </div>
+        )}
+
+        {/* Mobile Bottom Sheet: Scenario Builder */}
+        {isMobile && isBottomSheetOpen && (
+          <>
+            <div
+              className="bottom-sheet-backdrop"
+              onClick={() => setIsBottomSheetOpen(false)}
+              aria-hidden="true"
+            />
+            <div className="builder-panel mobile-sheet glass-panel animate-fade-in">
+              <div className="mobile-sheet-top-bar">
+                <div className="mobile-sheet-handle" />
+                <button
+                  type="button"
+                  className="mobile-sheet-close"
+                  onClick={() => setIsBottomSheetOpen(false)}
+                  aria-label="Close parameters"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              {renderBuilderContent()}
+            </div>
+          </>
+        )}
+
+        {/* Desktop Right Panel: Synchronized Split Maps & Results Summary */}
+        {!isMobile && (
+          <div className="results-panel">
+            {/* Synchronized Field Atlas Map Controls (Top-Right of results panel) */}
+            <MapControls
+              className="scenario-map-controls"
+              viewState={viewState}
+              onViewStateChange={setViewState}
+            />
+
+            <div className="split-maps">
+              {/* Before Map */}
+              <div className="map-half">
+                <div className="map-label">
+                  <span>Before (Baseline)</span>
+                  <button
+                    className="info-trigger"
+                    onClick={() => setShowLstInfo(true)}
+                    aria-label="What does LST mean?"
+                  >
+                    <Info size={12} />
+                  </button>
+                </div>
+                <DeckGL
+                  id="deckgl-before"
+                  viewState={viewState}
+                  onViewStateChange={handleViewStateChange}
+                  controller={true}
+                  layers={beforeLayers}
+                  getTooltip={getBeforeTooltip}
+                >
+                  <Map
+                    {...viewState}
+                    mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
+                    attributionControl={false}
+                  />
+                </DeckGL>
+              </div>
+
+              {/* After Map */}
+              <div className="map-half">
+                <div className="map-label">
+                  <span>After (Scenario Simulation)</span>
+                  {simulationResult && (
+                    <span className="map-sim-tag font-mono">
+                      {simulationResult.summary.cells_modified} cells
+                    </span>
+                  )}
+                </div>
+                <DeckGL
+                  id="deckgl-after"
+                  viewState={viewState}
+                  onViewStateChange={handleViewStateChange}
+                  controller={true}
+                  layers={afterLayers}
+                  getTooltip={getAfterTooltip}
+                >
+                  <Map
+                    {...viewState}
+                    mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
+                    attributionControl={false}
+                  />
+                </DeckGL>
+              </div>
+            </div>
+
+            {/* Map Attribution Bar */}
+            <MapAttribution className="scenario-map-attribution" />
+
+            {/* Results Summary Overlay */}
+            {simulationResult && simulationResult.summary && (
+              <div className="results-summary glass-panel animate-fade-in">
+                <div className="result-metric">
+                  <span className="metric-label">Mean Cooling</span>
+                  <span className="metric-value text-success">
+                    {simulationResult.summary.mean_cooling_c.toFixed(2)}°C
+                  </span>
+                  <span className="metric-sub font-mono">
+                    Max: {simulationResult.summary.max_cooling_c.toFixed(2)}°C
+                  </span>
+                </div>
+
+                <div className="result-metric">
+                  <span className="metric-label">Hotspot Reduction</span>
+                  <span className="metric-value text-success">
+                    {simulationResult.summary.hotspot_reduction_pct.toFixed(1)}%
+                  </span>
+                  <span className="metric-sub font-mono">
+                    {simulationResult.summary.hotspots_after} remaining
+                  </span>
+                </div>
+
+                <div className="result-metric">
+                  <span className="metric-label">Targeted Cells</span>
+                  <span className="metric-value">
+                    {simulationResult.summary.cells_modified}
+                  </span>
+                  <span className="metric-sub font-mono">
+                    ~{(simulationResult.summary.cells_modified * 0.25).toFixed(1)} km²
+                  </span>
+                </div>
+
+                <div className="result-metric">
+                  <span className="metric-label">Est. Capital Cost</span>
+                  <span className="metric-value text-warning">
+                    ${simulationResult.summary.cost_estimate_m.toFixed(1)}M
+                  </span>
+                  <span className="metric-sub font-mono">
+                    {simulationResult.summary.cost_efficiency_c_per_m > 0
+                      ? `${(simulationResult.summary.cost_efficiency_c_per_m * 1000).toFixed(1)}m°C/$M`
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mobile View: Single Full Map with A/B Toggle & Collapsible Bottom Controls */}
+        {isMobile && (
+          <div className="results-panel mobile-results">
+            {/* Prominent segmented toggle for A/B comparison on the same full map */}
+            <div className="scenario-mobile-compare-toggle glass-panel">
+              <button
+                type="button"
+                className={`compare-toggle-tab ${mobileCompareMode === 'before' ? 'active' : ''}`}
+                onClick={() => setMobileCompareMode('before')}
+              >
+                <span>Before (Baseline)</span>
+              </button>
+              <button
+                type="button"
+                className={`compare-toggle-tab ${mobileCompareMode === 'after' ? 'active' : ''}`}
+                onClick={() => setMobileCompareMode('after')}
+              >
+                <span>After (Simulation)</span>
+                {simulationResult && (
+                  <span className="compare-tag-dot font-mono">
+                    {simulationResult.summary.cells_modified}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <MapControls
+              className="scenario-map-controls mobile-controls"
+              viewState={viewState}
+              onViewStateChange={setViewState}
+            />
+
+            <div className="mobile-single-map">
               <DeckGL
-                id="deckgl-after"
+                id="deckgl-mobile-compare"
                 viewState={viewState}
                 onViewStateChange={handleViewStateChange}
                 controller={true}
-                layers={afterLayers}
-                getTooltip={getAfterTooltip}
+                layers={mobileCompareMode === 'after' ? afterLayers : beforeLayers}
+                getTooltip={mobileCompareMode === 'after' ? getAfterTooltip : getBeforeTooltip}
               >
                 <Map
                   {...viewState}
@@ -840,58 +997,75 @@ export default function ScenarioView({ city, cityInfo }) {
                 />
               </DeckGL>
             </div>
+
+            <MapAttribution className="scenario-map-attribution mobile-attribution" />
+
+            {/* Compact mobile results summary overlay */}
+            {simulationResult && simulationResult.summary && (
+              <div className="results-summary glass-panel mobile-summary animate-fade-in">
+                <div className="result-metric">
+                  <span className="metric-label">Mean Cooling</span>
+                  <span className="metric-value text-success font-mono">
+                    {simulationResult.summary.mean_cooling_c.toFixed(2)}°C
+                  </span>
+                </div>
+                <div className="result-metric">
+                  <span className="metric-label">Hotspots</span>
+                  <span className="metric-value text-success font-mono">
+                    -{simulationResult.summary.hotspot_reduction_pct.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="result-metric">
+                  <span className="metric-label">Cost</span>
+                  <span className="metric-value text-warning font-mono">
+                    ${simulationResult.summary.cost_estimate_m.toFixed(1)}M
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Collapsed bottom bar trigger */}
+            {!isBottomSheetOpen && (
+              <div className="mobile-builder-bottom-bar glass-panel animate-fade-in">
+                <button
+                  type="button"
+                  className="builder-drawer-trigger"
+                  onClick={() => setIsBottomSheetOpen(true)}
+                  aria-label="Open Scenario Parameters"
+                >
+                  <Sliders size={15} />
+                  <div className="drawer-title-group">
+                    <span className="drawer-title">Scenario Parameters</span>
+                    <span className="drawer-sub font-mono">
+                      {hasActiveIntervention
+                        ? `${Object.values(intensities).filter((v) => v > 0).length} active · ${
+                            targetScope === 'all' ? 'All cells' : `${hotspotsCount} hotspots`
+                          }`
+                        : 'Configure cooling interventions'}
+                    </span>
+                  </div>
+                  <ChevronUp size={16} className="drawer-chevron" />
+                </button>
+
+                {hasActiveIntervention && (
+                  <button
+                    type="button"
+                    className="drawer-quick-simulate-btn"
+                    onClick={runSimulation}
+                    disabled={isSimulating}
+                  >
+                    {isSimulating ? (
+                      <RefreshCw size={13} className="spin-icon" />
+                    ) : (
+                      <Play size={13} />
+                    )}
+                    <span>{isSimulating ? 'Simulating' : 'Simulate'}</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-
-          {/* Map Attribution Bar */}
-          <MapAttribution className="scenario-map-attribution" />
-
-          {/* Results Summary Overlay */}
-          {simulationResult && simulationResult.summary && (
-            <div className="results-summary glass-panel animate-fade-in">
-              <div className="result-metric">
-                <span className="metric-label">Mean Cooling</span>
-                <span className="metric-value text-success">
-                  {simulationResult.summary.mean_cooling_c.toFixed(2)}°C
-                </span>
-                <span className="metric-sub font-mono">
-                  Max: {simulationResult.summary.max_cooling_c.toFixed(2)}°C
-                </span>
-              </div>
-
-              <div className="result-metric">
-                <span className="metric-label">Hotspot Reduction</span>
-                <span className="metric-value text-success">
-                  {simulationResult.summary.hotspot_reduction_pct.toFixed(1)}%
-                </span>
-                <span className="metric-sub font-mono">
-                  {simulationResult.summary.hotspots_after} remaining
-                </span>
-              </div>
-
-              <div className="result-metric">
-                <span className="metric-label">Targeted Cells</span>
-                <span className="metric-value">
-                  {simulationResult.summary.cells_modified}
-                </span>
-                <span className="metric-sub font-mono">
-                  ~{(simulationResult.summary.cells_modified * 0.25).toFixed(1)} km²
-                </span>
-              </div>
-
-              <div className="result-metric">
-                <span className="metric-label">Est. Capital Cost</span>
-                <span className="metric-value text-warning">
-                  ${simulationResult.summary.cost_estimate_m.toFixed(1)}M
-                </span>
-                <span className="metric-sub font-mono">
-                  {simulationResult.summary.cost_efficiency_c_per_m > 0
-                    ? `${(simulationResult.summary.cost_efficiency_c_per_m * 1000).toFixed(1)}m°C/$M`
-                    : '—'}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {showLstInfo && <LstExplainerModal onClose={() => setShowLstInfo(false)} />}

@@ -214,6 +214,17 @@ export default function DriversView({ city, cityInfo }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Responsive state
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 640
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     if (!city) return;
 
@@ -450,7 +461,12 @@ export default function DriversView({ city, cityInfo }) {
                   <BarChart
                     data={filteredImportance}
                     layout="vertical"
-                    margin={{ top: 10, right: 30, left: 10, bottom: 5 }}
+                    margin={{
+                      top: 10,
+                      right: isMobile ? 12 : 30,
+                      left: isMobile ? -10 : 10,
+                      bottom: 5
+                    }}
                     onClick={(e) => {
                       if (e?.activePayload?.[0]?.payload?.feature) {
                         setSelectedFeatureKey(e.activePayload[0].payload.feature);
@@ -465,7 +481,7 @@ export default function DriversView({ city, cityInfo }) {
                     <XAxis
                       type="number"
                       domain={[0, 'dataMax + 0.3']}
-                      tick={{ fill: 'var(--text-3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
+                      tick={{ fill: 'var(--text-3)', fontSize: 9.5, fontFamily: 'var(--font-mono)' }}
                       axisLine={{ stroke: 'var(--line)' }}
                       tickLine={false}
                       unit="°C"
@@ -473,11 +489,21 @@ export default function DriversView({ city, cityInfo }) {
                     <YAxis
                       type="category"
                       dataKey="feature"
-                      tickFormatter={(k) => getFeatureInfo(k).name}
-                      width={185}
+                      tickFormatter={(k) => {
+                        const name = getFeatureInfo(k).name;
+                        if (isMobile && name.length > 14) {
+                          return name.slice(0, 13) + '…';
+                        }
+                        return name;
+                      }}
+                      width={isMobile ? 105 : 185}
                       axisLine={{ stroke: 'var(--line)' }}
                       tickLine={false}
-                      tick={{ fill: 'var(--text-2)', fontSize: 11, fontFamily: 'var(--font-sans)' }}
+                      tick={{
+                        fill: 'var(--text-2)',
+                        fontSize: isMobile ? 9.5 : 11,
+                        fontFamily: 'var(--font-sans)'
+                      }}
                     />
                     <Tooltip
                       cursor={{ fill: 'var(--surface-3)', opacity: 0.5 }}

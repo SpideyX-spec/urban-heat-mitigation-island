@@ -145,6 +145,23 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Touchscreen and Mobile Ergonomics */
+button, input, select, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch-friendly range slider defaults */
+.range-slider {
+  touch-action: pan-y;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .range-slider {
+    height: 32px;
+  }
+}
+
 /* Sharp Instrument Panel */
 .glass-panel {
   background: var(--surface-1);
