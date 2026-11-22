@@ -9,11 +9,16 @@ export default function ValidationBadge({ validation, onOpenMethodology }) {
   if (!validation || !validation.available) {
     return (
       <div className="validation-badge uncalibrated">
-        <div className="validation-badge-trigger" onClick={() => onOpenMethodology?.()}>
-          <Satellite size={13} />
+        <button
+          type="button"
+          className="validation-badge-trigger"
+          onClick={() => onOpenMethodology?.()}
+          aria-label="Inspect data methodology and calibration status (Uncalibrated)"
+        >
+          <Satellite size={13} aria-hidden="true" />
           <span className="badge-title">Satellite Cross-Reference</span>
           <span className="discrepancy-tag uncalibrated-tag">Uncalibrated</span>
-        </div>
+        </button>
       </div>
     );
   }

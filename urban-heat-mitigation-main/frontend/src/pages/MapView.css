@@ -221,11 +221,15 @@
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent-primary);
+  color: #60a5fa;
   background: var(--surface-3);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
+}
+
+[data-theme="light"] .kpi-hero-tag {
+  color: #0052a3;
 }
 
 .kpi-hero-scope {
@@ -324,7 +328,11 @@
 }
 
 .kpi-metric-value.danger {
-  color: var(--tier-critical);
+  color: #f87171;
+}
+
+[data-theme="light"] .kpi-metric-value.danger {
+  color: #dc2626;
 }
 
 .kpi-metric-value.warning {
@@ -444,10 +452,20 @@
 }
 
 .tier-swatch {
-  width: 5px;
-  height: 5px;
-  border-radius: 1px;
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tier-glyph {
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1;
+  color: #12161A;
 }
 
 .tier-name {

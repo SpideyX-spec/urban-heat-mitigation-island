@@ -1,19 +1,30 @@
 import { X, Thermometer, Sun, Wind } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import './LstExplainerModal.css';
 
 export default function LstExplainerModal({ onClose }) {
+  const modalRef = useFocusTrap(true, onClose);
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card glass-panel" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Close">
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        ref={modalRef}
+        className="modal-card glass-panel"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lst-modal-title"
+        tabIndex={-1}
+      >
+        <button className="modal-close" onClick={onClose} aria-label="Close temperature explanation dialog">
           <X size={18} />
         </button>
 
-        <div className="modal-icon">
+        <div className="modal-icon" aria-hidden="true">
           <Thermometer size={22} />
         </div>
 
-        <h2>What does "temperature" mean here?</h2>
+        <h2 id="lst-modal-title">What does &ldquo;temperature&rdquo; mean here?</h2>
         <p className="modal-intro">
           This map shows <strong>Land Surface Temperature (LST)</strong> — not
           the air temperature you'd see on a weather app. They're measured

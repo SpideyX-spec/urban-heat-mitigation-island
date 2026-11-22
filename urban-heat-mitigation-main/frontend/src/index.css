@@ -10,7 +10,7 @@
   --line-strong: #36404A;
   --text-1: #E7EAEC;
   --text-2: #A3ACB4;
-  --text-3: #7C8791;
+  --text-3: #929EA9;
 
   /* ─── Mapped Semantic System Variables ───────────────────────── */
   --bg-primary: var(--canvas);
@@ -76,8 +76,8 @@
   --line: #D0D6DC;
   --line-strong: #B4BCC4;
   --text-1: #12161A;
-  --text-2: #4A5560;
-  --text-3: #7C8791;
+  --text-2: #3E4954;
+  --text-3: #586573;
 
   --accent-primary: #0066CC;
   --accent-hover: #0052A3;
@@ -145,15 +145,62 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Accessible Keyboard Focus Indicators (WCAG 2.2 AA) */
+:focus-visible {
+  outline: 2px solid var(--accent-primary) !important;
+  outline-offset: 2px !important;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Screen Reader Only Utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Accessible Skip Navigation Link */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  background: var(--surface-1);
+  color: var(--text-1);
+  border: 1px solid var(--accent-primary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 10000;
+  text-decoration: none;
+  box-shadow: var(--shadow-lg);
+  transition: top 0.15s ease-out;
+}
+
+.skip-link:focus-visible {
+  top: 1rem;
+}
+
 /* Touchscreen and Mobile Ergonomics */
 button, input, select, a {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Touch-friendly range slider defaults */
+/* Touch-friendly range slider defaults (WCAG 2.2 AA Target Size >= 24px) */
 .range-slider {
   touch-action: pan-y;
   cursor: pointer;
+  height: 24px;
+  min-height: 24px;
 }
 
 @media (max-width: 768px) {
@@ -233,3 +280,16 @@ button, input, select, a {
 .maplibregl-ctrl-attrib a:hover {
   color: var(--text-1) !important;
 }
+
+/* WCAG 2.2 prefers-reduced-motion Compliance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

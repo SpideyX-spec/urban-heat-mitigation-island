@@ -1,23 +1,31 @@
 import { X, Flame, Map, BarChart2, Layers, Sparkles, Cpu, Database } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import './LstExplainerModal.css';
 import './AboutModal.css';
 
 export default function AboutModal({ onClose }) {
+  const modalRef = useFocusTrap(true, onClose);
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
+        ref={modalRef}
         className="modal-card modal-card--large glass-panel"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="about-modal-title"
+        tabIndex={-1}
       >
-        <button className="modal-close" onClick={onClose} aria-label="Close">
+        <button className="modal-close" onClick={onClose} aria-label="Close about dialog">
           <X size={18} />
         </button>
 
-        <div className="modal-icon about-icon">
+        <div className="modal-icon about-icon" aria-hidden="true">
           <Flame size={22} />
         </div>
 
-        <h2>What is Urban Heat?</h2>
+        <h2 id="about-modal-title">What is Urban Heat?</h2>
         <p className="modal-intro">
           Cities get hotter than the countryside around them — concrete,
           asphalt, and packed buildings trap heat that green, open land

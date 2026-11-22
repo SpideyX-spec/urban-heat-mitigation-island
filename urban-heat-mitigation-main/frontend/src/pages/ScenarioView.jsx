@@ -26,6 +26,7 @@ import { FlyToInterpolator } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE, fetchCityGrid, fetchCityPresets } from '../api';
 import { useTheme } from '../ThemeContext';
+import { TIER_SYMBOLS } from './MapView';
 import LstExplainerModal from '../components/LstExplainerModal';
 import MapControls from '../components/MapControls';
 import MapAttribution from '../components/MapAttribution';
@@ -451,13 +452,15 @@ export default function ScenarioView({ city, cityInfo }) {
   const beforeLayers = useMemo(() => (beforeLayer ? [beforeLayer] : []), [beforeLayer]);
   const afterLayers = useMemo(() => (afterLayer ? [afterLayer] : []), [afterLayer]);
 
-  // Memoized tooltip formatters
+  // Memoized tooltip formatters with accessible multi-channel classification
   const getBeforeTooltip = useCallback(
     ({ object }) => {
       if (!object) return null;
-      const tier = object.properties?.tier?.toUpperCase() || 'UNKNOWN';
+      const rawTier = object.properties?.tier?.toLowerCase() || 'normal';
+      const tierSymbol = TIER_SYMBOLS[rawTier] || '■';
+      const tier = rawTier.toUpperCase();
       const isHotspot = tier === 'CRITICAL' || tier === 'HIGH';
-      return `Cell: ${object.properties.grid_id}\nLST: ${object.properties.lst_mean?.toFixed(1)}°C (${tier})\nTarget Status: ${
+      return `Cell: ${object.properties.grid_id}\nLST: ${object.properties.lst_mean?.toFixed(1)}°C ([${tierSymbol}] ${tier})\nTarget Status: ${
         isHotspot
           ? 'Hotspot (Targeted)'
           : targetScope === 'all'
@@ -474,9 +477,11 @@ export default function ScenarioView({ city, cityInfo }) {
       const sim = cellResultsMap[object.properties.grid_id];
       const deltaT = sim?.delta_t ?? 0;
       const isTargeted = sim && Math.abs(deltaT) > 0.001;
-      const tier = (sim ? sim.tier_after : object.properties?.tier)?.toUpperCase() || 'UNKNOWN';
+      const rawTier = (sim ? sim.tier_after : object.properties?.tier)?.toLowerCase() || 'normal';
+      const tierSymbol = TIER_SYMBOLS[rawTier] || '■';
+      const tier = rawTier.toUpperCase();
       const lst = sim ? sim.lst_after : object.properties?.lst_mean;
-      return `Cell: ${object.properties.grid_id}\nSimulated LST: ${lst?.toFixed(1)}°C (${tier})\nCooling ΔT: ${
+      return `Cell: ${object.properties.grid_id}\nSimulated LST: ${lst?.toFixed(1)}°C ([${tierSymbol}] ${tier})\nCooling ΔT: ${
         deltaT < 0 ? deltaT.toFixed(2) + '°C' : '0.00°C'
       }\nTarget Status: ${
         isTargeted
@@ -488,6 +493,23 @@ export default function ScenarioView({ city, cityInfo }) {
     },
     [cellResultsMap, targetScope]
   );
+
+  // Dismiss open sheets and panels on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isBottomSheetOpen) {
+          setIsBottomSheetOpen(false);
+        } else if (expandedExplanation) {
+          setExpandedExplanation(null);
+        } else if (showAssumptions) {
+          setShowAssumptions(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBottomSheetOpen, expandedExplanation, showAssumptions]);
 
   // Synchronized camera handler between Before and After maps
   const handleViewStateChange = useCallback(({ viewState: nv }) => {
@@ -541,8 +563,8 @@ export default function ScenarioView({ city, cityInfo }) {
     <>
       <div className="panel-header">
         <div className="panel-title-row">
-          <Sliders size={16} className="panel-icon" />
-          <h2>Scenario Builder</h2>
+          <Sliders size={16} className="panel-icon" aria-hidden="true" />
+          <h2 id="scenario-builder-title">Scenario Builder</h2>
         </div>
         <p className="panel-description">
           Simulate cooling intervention scenarios for{' '}
@@ -554,25 +576,33 @@ export default function ScenarioView({ city, cityInfo }) {
       {/* Explicit Targeting Control */}
       <div className="targeting-card">
         <div className="targeting-header">
-          <Target size={14} className="targeting-icon" />
+          <Target size={14} className="targeting-icon" aria-hidden="true" />
           <span className="targeting-title">Spatial Targeting</span>
           <span className="targeting-badge font-mono">
             {activeTargetCount} cells · ~{activeTargetAreaKm2} km²
           </span>
         </div>
 
-        <div className="targeting-toggle-group">
+        <div
+          className="targeting-toggle-group"
+          role="radiogroup"
+          aria-label="Spatial targeting scope"
+        >
           <button
             type="button"
+            role="radio"
+            aria-checked={targetScope === 'hotspots'}
             className={`target-btn ${targetScope === 'hotspots' ? 'active' : ''}`}
             onClick={() => setTargetScope('hotspots')}
           >
             <div className="target-btn-title">Hotspots Only</div>
-            <div className="target-btn-sub">Critical & High Tiers</div>
+            <div className="target-btn-sub">Critical &amp; High Tiers</div>
           </button>
 
           <button
             type="button"
+            role="radio"
+            aria-checked={targetScope === 'all'}
             className={`target-btn ${targetScope === 'all' ? 'active' : ''}`}
             onClick={() => setTargetScope('all')}
           >
@@ -617,10 +647,12 @@ export default function ScenarioView({ city, cityInfo }) {
               <div key={inv.id} className={`slider-group ${value > 0 ? 'active-slider' : ''}`}>
                 <div className="slider-header">
                   <div className="slider-title-line">
-                    <span className="icon">
+                    <span className="icon" aria-hidden="true">
                       <IconComp size={14} />
                     </span>
-                    <span className="name">{inv.label}</span>
+                    <label htmlFor={`slider-${inv.id}`} className="name">
+                      {inv.label}
+                    </label>
                     <span className="value font-mono">{pct}%</span>
                   </div>
 
@@ -635,13 +667,18 @@ export default function ScenarioView({ city, cityInfo }) {
 
                 <input
                   type="range"
+                  id={`slider-${inv.id}`}
                   min="0"
                   max="1"
                   step="0.05"
                   value={value}
                   onChange={(e) => handleSliderChange(inv.id, e.target.value)}
                   className="range-slider"
-                  aria-label={`${inv.label} intensity`}
+                  aria-label={`${inv.label} intervention intensity`}
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow={pct}
+                  aria-valuetext={`${pct}% ${inv.label}`}
                 />
 
                 <div className="slider-footer">
@@ -650,16 +687,17 @@ export default function ScenarioView({ city, cityInfo }) {
                     className="toggle-explanation-btn"
                     onClick={() => setExpandedExplanation(isExpanded ? null : inv.id)}
                     aria-expanded={isExpanded}
+                    aria-controls={`benchmark-matrix-${inv.id}`}
                   >
-                    <HelpCircle size={11} />
+                    <HelpCircle size={11} aria-hidden="true" />
                     <span>What do 0%, 50%, 100% mean?</span>
-                    {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                    {isExpanded ? <ChevronUp size={11} aria-hidden="true" /> : <ChevronDown size={11} aria-hidden="true" />}
                   </button>
                 </div>
 
                 {/* Explanatory Benchmark Matrix */}
                 {isExpanded && (
-                  <div className="benchmark-matrix animate-fade-in">
+                  <div id={`benchmark-matrix-${inv.id}`} className="benchmark-matrix animate-fade-in">
                     <div className="benchmark-tagline">{inv.tagline}</div>
                     <div className="benchmark-features">
                       <strong>Model Features:</strong> <code>{inv.modelFeatures}</code>
@@ -689,6 +727,11 @@ export default function ScenarioView({ city, cityInfo }) {
           className="btn-simulate"
           onClick={runSimulation}
           disabled={isSimulating || !hasActiveIntervention}
+          aria-label={
+            isSimulating
+              ? `Re-predicting scenario cooling for ${activeTargetCount} cells...`
+              : 'Run cooling intervention scenario simulation'
+          }
           title={
             !hasActiveIntervention
               ? 'Adjust at least one slider above 0% to run simulation'
@@ -697,12 +740,12 @@ export default function ScenarioView({ city, cityInfo }) {
         >
           {isSimulating ? (
             <>
-              <RefreshCw size={14} className="spin-icon" />
+              <RefreshCw size={14} className="spin-icon" aria-hidden="true" />
               <span>Re-Predicting ({activeTargetCount} Cells)...</span>
             </>
           ) : (
             <>
-              <Play size={13} className="btn-icon" />
+              <Play size={13} className="btn-icon" aria-hidden="true" />
               <span>Run Simulation</span>
             </>
           )}
@@ -712,16 +755,20 @@ export default function ScenarioView({ city, cityInfo }) {
           className="btn-reset"
           onClick={handleResetSliders}
           disabled={isSimulating || !hasActiveIntervention}
+          aria-label="Reset all scenario intervention sliders to baseline (0%)"
           title="Reset all sliders to baseline (0%)"
         >
-          <RotateCcw size={13} />
+          <RotateCcw size={13} aria-hidden="true" />
           <span>Reset</span>
         </button>
       </div>
 
       {/* Status Message */}
       {statusMessage && (
-        <div className={`status-message status-${statusMessage.type} animate-fade-in`}>
+        <div
+          role="status"
+          className={`status-message status-${statusMessage.type} animate-fade-in`}
+        >
           {statusMessage.text}
         </div>
       )}
@@ -729,16 +776,17 @@ export default function ScenarioView({ city, cityInfo }) {
       {/* Presets Section */}
       <div className="presets-section">
         <div className="presets-header">
-          <Sparkles size={12} className="presets-icon" />
+          <Sparkles size={12} className="presets-icon" aria-hidden="true" />
           <h3>Scenario Presets</h3>
         </div>
-        <div className="preset-buttons">
+        <div className="preset-buttons" role="group" aria-label="Intervention preset scenarios">
           {presets.map((p) => (
             <button
               key={p.scenario_id}
               onClick={() => loadPreset(p)}
               className={`btn-preset ${activePresetId === p.scenario_id ? 'active' : ''}`}
               disabled={isSimulating}
+              aria-pressed={activePresetId === p.scenario_id}
             >
               <div className="preset-btn-top">
                 <span className="preset-name">{p.name}</span>
@@ -761,14 +809,15 @@ export default function ScenarioView({ city, cityInfo }) {
           className="assumptions-toggle"
           onClick={() => setShowAssumptions(!showAssumptions)}
           aria-expanded={showAssumptions}
+          aria-controls="scenario-assumptions-panel"
         >
-          <AlertTriangle size={13} className="assumptions-icon" />
-          <span>Assumptions & Model Limitations</span>
-          {showAssumptions ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          <AlertTriangle size={13} className="assumptions-icon" aria-hidden="true" />
+          <span>Assumptions &amp; Model Limitations</span>
+          {showAssumptions ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
         </button>
 
         {showAssumptions && (
-          <div className="assumptions-content animate-fade-in">
+          <div id="scenario-assumptions-panel" className="assumptions-content animate-fade-in">
             <ul>
               <li>
                 <strong>Statistical Surrogate (Not CFD):</strong> Predictions are computed by an
@@ -814,14 +863,20 @@ export default function ScenarioView({ city, cityInfo }) {
               onClick={() => setIsBottomSheetOpen(false)}
               aria-hidden="true"
             />
-            <div className="builder-panel mobile-sheet glass-panel animate-fade-in">
+            <div
+              className="builder-panel mobile-sheet glass-panel animate-fade-in"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="scenario-builder-title"
+              tabIndex={-1}
+            >
               <div className="mobile-sheet-top-bar">
                 <div className="mobile-sheet-handle" />
                 <button
                   type="button"
                   className="mobile-sheet-close"
                   onClick={() => setIsBottomSheetOpen(false)}
-                  aria-label="Close parameters"
+                  aria-label="Close parameters sheet"
                 >
                   <X size={16} />
                 </button>
@@ -953,11 +1008,16 @@ export default function ScenarioView({ city, cityInfo }) {
         {isMobile && (
           <div className="results-panel mobile-results">
             {/* Prominent segmented toggle for A/B comparison on the same full map */}
-            <div className="scenario-mobile-compare-toggle glass-panel">
+            <div
+              className="scenario-mobile-compare-toggle glass-panel"
+              role="group"
+              aria-label="Scenario before and after view comparison"
+            >
               <button
                 type="button"
                 className={`compare-toggle-tab ${mobileCompareMode === 'before' ? 'active' : ''}`}
                 onClick={() => setMobileCompareMode('before')}
+                aria-pressed={mobileCompareMode === 'before'}
               >
                 <span>Before (Baseline)</span>
               </button>
@@ -965,6 +1025,7 @@ export default function ScenarioView({ city, cityInfo }) {
                 type="button"
                 className={`compare-toggle-tab ${mobileCompareMode === 'after' ? 'active' : ''}`}
                 onClick={() => setMobileCompareMode('after')}
+                aria-pressed={mobileCompareMode === 'after'}
               >
                 <span>After (Simulation)</span>
                 {simulationResult && (

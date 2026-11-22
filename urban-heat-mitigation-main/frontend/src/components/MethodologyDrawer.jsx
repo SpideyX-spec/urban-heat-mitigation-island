@@ -1,15 +1,9 @@
-import { useEffect } from 'react';
 import { X, Database, Cpu, Satellite, AlertTriangle, ExternalLink } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import './MethodologyDrawer.css';
 
 export default function MethodologyDrawer({ isOpen, onClose, city, cityInfo, validation }) {
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const drawerRef = useFocusTrap(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -17,17 +11,20 @@ export default function MethodologyDrawer({ isOpen, onClose, city, cityInfo, val
   const cityName = cityInfo?.name || city || 'Selected City';
 
   return (
-    <div className="methodology-backdrop" onClick={onClose}>
+    <div className="methodology-backdrop" onClick={onClose} role="presentation">
       <aside
+        ref={drawerRef}
         className="methodology-drawer glass-panel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="Data Provenance and Methodology"
+        aria-modal="true"
+        aria-labelledby="methodology-drawer-title"
+        tabIndex={-1}
       >
         <div className="drawer-header">
           <div className="drawer-title-group">
             <span className="drawer-eyebrow">Scientific Documentation</span>
-            <h2>Data Provenance &amp; Methodology</h2>
+            <h2 id="methodology-drawer-title">Data Provenance &amp; Methodology</h2>
           </div>
           <button
             className="drawer-close-btn"

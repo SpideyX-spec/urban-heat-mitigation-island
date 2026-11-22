@@ -428,11 +428,12 @@ export default function DriversView({ city, cityInfo }) {
               </div>
 
               {/* Directional Filter Controls */}
-              <div className="filter-controls">
+              <div className="filter-controls" role="group" aria-label="Feature directional effect filter">
                 <button
                   type="button"
                   className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`}
                   onClick={() => setActiveFilter('all')}
+                  aria-pressed={activeFilter === 'all'}
                 >
                   All ({globalImportance.length})
                 </button>
@@ -441,21 +442,48 @@ export default function DriversView({ city, cityInfo }) {
                   className={`filter-btn ${activeFilter === 'heating' ? 'active' : ''}`}
                   onClick={() => setActiveFilter('heating')}
                   title="Filter to features that drive temperatures higher"
+                  aria-pressed={activeFilter === 'heating'}
                 >
-                  <span className="symbol-heating">▲</span> Heating
+                  <span className="symbol-heating" aria-hidden="true">▲</span> Heating
                 </button>
                 <button
                   type="button"
                   className={`filter-btn ${activeFilter === 'cooling' ? 'active' : ''}`}
                   onClick={() => setActiveFilter('cooling')}
                   title="Filter to features that provide cooling buffering"
+                  aria-pressed={activeFilter === 'cooling'}
                 >
-                  <span className="symbol-cooling">▼</span> Cooling
+                  <span className="symbol-cooling" aria-hidden="true">▼</span> Cooling
                 </button>
               </div>
             </div>
 
-            <div className="chart-wrapper">
+            {/* Accessible Keyboard Selector for Feature Inspector */}
+            <div className="accessible-feature-bar">
+              <label htmlFor="feature-inspect-select" className="accessible-picker-label font-mono">
+                Inspect Feature:
+              </label>
+              <select
+                id="feature-inspect-select"
+                className="accessible-feature-select font-mono"
+                value={selectedFeatureKey}
+                onChange={(e) => setSelectedFeatureKey(e.target.value)}
+                aria-label="Select feature to inspect attribution details"
+              >
+                {globalImportance.map((item) => (
+                  <option key={item.feature} value={item.feature}>
+                    {item.direction === 'positive' ? '▲ Heating: ' : '▼ Cooling: '}
+                    {getFeatureInfo(item.feature).name} ({item.importance.toFixed(2)}°C)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div
+              className="chart-wrapper"
+              role="img"
+              aria-label={`Horizontal bar chart ranking top ${filteredImportance.length} features by mean absolute SHAP value on Land Surface Temperature`}
+            >
               {filteredImportance.length > 0 ? (
                 <ResponsiveContainer width="100%" height={430}>
                   <BarChart
@@ -671,7 +699,11 @@ export default function DriversView({ city, cityInfo }) {
                     <span className="dep-unit font-mono">Unit: {info.unit}</span>
                   </div>
 
-                  <div className="dep-chart-container">
+                  <div
+                    className="dep-chart-container"
+                    role="img"
+                    aria-label={`SHAP dependence scatter plot for ${info.name}`}
+                  >
                     {points.length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
                         <ScatterChart margin={{ top: 10, right: 15, bottom: 20, left: 10 }}>

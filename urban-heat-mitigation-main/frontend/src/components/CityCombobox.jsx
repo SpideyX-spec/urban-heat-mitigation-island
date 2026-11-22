@@ -13,6 +13,7 @@ export default function CityCombobox({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const containerRef = useRef(null);
+  const triggerRef = useRef(null);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -89,6 +90,8 @@ export default function CityCombobox({
     setIsOpen(false);
     setSearchQuery('');
     setHighlightedIndex(-1);
+    // Return focus to trigger button
+    setTimeout(() => triggerRef.current?.focus(), 10);
   };
 
   const handleKeyDown = (e) => {
@@ -102,10 +105,16 @@ export default function CityCombobox({
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex(prev => (prev + 1 < flatCities.length ? prev + 1 : 0));
+      setHighlightedIndex((prev) => (prev + 1 < flatCities.length ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex(prev => (prev - 1 >= 0 ? prev - 1 : flatCities.length - 1));
+      setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : flatCities.length - 1));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setHighlightedIndex(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setHighlightedIndex(flatCities.length - 1);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (highlightedIndex >= 0 && flatCities[highlightedIndex]) {
@@ -116,20 +125,34 @@ export default function CityCombobox({
       setIsOpen(false);
       setSearchQuery('');
       setHighlightedIndex(-1);
+      triggerRef.current?.focus();
+    } else if (e.key === 'Tab') {
+      // Allow natural tab to escape combobox, close popover
+      setIsOpen(false);
+      setSearchQuery('');
+      setHighlightedIndex(-1);
     }
   };
+
+  const activeOptionId =
+    highlightedIndex >= 0 && flatCities[highlightedIndex]
+      ? `city-opt-${flatCities[highlightedIndex].id}`
+      : undefined;
 
   return (
     <div className="city-combobox-container" ref={containerRef} onKeyDown={handleKeyDown}>
       {/* Combobox Trigger */}
       <button
+        ref={triggerRef}
         type="button"
         className={`city-combobox-trigger${isOpen ? ' is-open' : ''}`}
-        onClick={() => !disabled && setIsOpen(prev => !prev)}
+        onClick={() => !disabled && setIsOpen((prev) => !prev)}
         disabled={disabled || cities.length === 0}
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-label="Select City"
+        aria-controls="city-options-list"
+        aria-label={`Select city. Current selection: ${selectedCity ? selectedCity.name : 'none'}`}
       >
         <span className="trigger-pin-icon" aria-hidden="true">
           <MapPin size={13} />
@@ -159,7 +182,7 @@ export default function CityCombobox({
 
       {/* Dropdown Popover */}
       {isOpen && (
-        <div className="city-combobox-dropdown" role="listbox">
+        <div className="city-combobox-dropdown">
           {/* Search Input Bar */}
           <div className="combobox-search-bar">
             <Search size={13} className="search-icon" aria-hidden="true" />
@@ -173,6 +196,10 @@ export default function CityCombobox({
                 setSearchQuery(e.target.value);
                 setHighlightedIndex(0);
               }}
+              role="searchbox"
+              aria-autocomplete="list"
+              aria-controls="city-options-list"
+              aria-activedescendant={activeOptionId}
               aria-label="Filter cities by name or state"
             />
             {searchQuery && (
@@ -188,36 +215,48 @@ export default function CityCombobox({
           </div>
 
           {/* Grouped City List */}
-          <div className="combobox-list-scroll" ref={listRef}>
+          <div
+            className="combobox-list-scroll"
+            ref={listRef}
+            role="listbox"
+            id="city-options-list"
+            aria-label="Available cities"
+            tabIndex={-1}
+          >
             {groupedCities.length === 0 ? (
-              <div className="combobox-empty">
+              <div className="combobox-empty" role="status">
                 No cities found matching &ldquo;{searchQuery}&rdquo;
               </div>
             ) : (
               groupedCities.map((group) => (
-                <div key={group.state} className="combobox-group">
-                  <div className="combobox-group-header font-mono">
+                <div key={group.state} className="combobox-group" role="group" aria-label={group.state}>
+                  <div className="combobox-group-header font-mono" aria-hidden="true">
                     <span>{group.state}</span>
                     <span className="group-count">{group.cities.length}</span>
                   </div>
                   {group.cities.map((city) => {
-                    const currentIndex = flatCities.findIndex(c => c.id === city.id);
+                    const currentIndex = flatCities.findIndex((c) => c.id === city.id);
                     const isSelected = city.id === selectedCityId;
                     const isHighlighted = currentIndex === highlightedIndex;
 
                     return (
                       <div
                         key={city.id}
+                        id={`city-opt-${city.id}`}
                         data-index={currentIndex}
                         role="option"
                         aria-selected={isSelected}
-                        className={`combobox-option${isSelected ? ' is-selected' : ''}${isHighlighted ? ' is-highlighted' : ''}`}
+                        className={`combobox-option${isSelected ? ' is-selected' : ''}${
+                          isHighlighted ? ' is-highlighted' : ''
+                        }`}
                         onClick={() => handleSelect(city.id)}
                         onMouseEnter={() => setHighlightedIndex(currentIndex)}
                       >
                         <div className="option-text">
                           <span className="option-city-name">{city.name}</span>
-                          <span className="option-state-tag font-mono">{city.state || city.country}</span>
+                          <span className="option-state-tag font-mono">
+                            {city.state || city.country}
+                          </span>
                         </div>
                         {isSelected && (
                           <span className="option-check" aria-hidden="true">

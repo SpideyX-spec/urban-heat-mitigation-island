@@ -165,6 +165,11 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Accessible Skip Navigation Link */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
       {/* Compact Top Navigation Bar */}
       <header className="top-navbar" role="banner">
         {/* Left Section: Brand & Searchable City Combobox */}
@@ -193,6 +198,7 @@ function App() {
           <NavLink
             to={`/${activeCityId}/map`}
             className={() => `nav-tab${currentView === 'map' ? ' active' : ''}`}
+            aria-current={currentView === 'map' ? 'page' : undefined}
             end
           >
             <Map size={14} aria-hidden="true" />
@@ -202,6 +208,7 @@ function App() {
           <NavLink
             to={`/${activeCityId}/drivers`}
             className={() => `nav-tab${currentView === 'drivers' ? ' active' : ''}`}
+            aria-current={currentView === 'drivers' ? 'page' : undefined}
           >
             <BarChart2 size={14} aria-hidden="true" />
             <span>Heat Drivers</span>
@@ -210,6 +217,7 @@ function App() {
           <NavLink
             to={`/${activeCityId}/scenarios`}
             className={() => `nav-tab${currentView === 'scenarios' ? ' active' : ''}`}
+            aria-current={currentView === 'scenarios' ? 'page' : undefined}
           >
             <Layers size={14} aria-hidden="true" />
             <span>Scenarios</span>
@@ -223,6 +231,8 @@ function App() {
             className="nav-tool-btn methodology-btn"
             onClick={() => setShowMethodology(true)}
             title="Inspect Data Provenance, XGBoost Model, and Landsat Comparison"
+            aria-haspopup="dialog"
+            aria-label="Inspect data methodology and provenance documentation"
           >
             <Database size={13} aria-hidden="true" />
             <span className="tool-label">Methodology</span>
@@ -233,7 +243,8 @@ function App() {
             className="nav-tool-btn icon-only"
             onClick={() => setShowAbout(true)}
             title="Platform Instructions & Architecture"
-            aria-label="About & Instructions"
+            aria-label="About Urban Heat platform & instructions"
+            aria-haspopup="dialog"
           >
             <Info size={14} aria-hidden="true" />
           </button>
@@ -243,15 +254,15 @@ function App() {
             className="nav-tool-btn icon-only theme-toggle-btn"
             onClick={toggleTheme}
             title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} theme`}
-            aria-label="Toggle theme"
+            aria-label={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} theme`}
           >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+            {theme === 'light' ? <Moon size={14} aria-hidden="true" /> : <Sun size={14} aria-hidden="true" />}
           </button>
         </div>
       </header>
 
       {/* Main Content Area: Map remains the dominant visual canvas */}
-      <main className="main-content" role="main">
+      <main id="main-content" className="main-content" role="main" tabIndex={-1}>
         {loadingCities && !selectedCity && (
           <div className="page-loading-scrim">
             <ServerWakingNotice compact onRetry={fetchCities} error={citiesError} />
@@ -320,6 +331,7 @@ function App() {
         <NavLink
           to={`/${activeCityId}/map`}
           className={() => `mobile-nav-tab${currentView === 'map' ? ' active' : ''}`}
+          aria-current={currentView === 'map' ? 'page' : undefined}
           end
         >
           <Map size={18} aria-hidden="true" />
@@ -329,6 +341,7 @@ function App() {
         <NavLink
           to={`/${activeCityId}/drivers`}
           className={() => `mobile-nav-tab${currentView === 'drivers' ? ' active' : ''}`}
+          aria-current={currentView === 'drivers' ? 'page' : undefined}
         >
           <BarChart2 size={18} aria-hidden="true" />
           <span>Heat Drivers</span>
@@ -337,6 +350,7 @@ function App() {
         <NavLink
           to={`/${activeCityId}/scenarios`}
           className={() => `mobile-nav-tab${currentView === 'scenarios' ? ' active' : ''}`}
+          aria-current={currentView === 'scenarios' ? 'page' : undefined}
         >
           <Layers size={18} aria-hidden="true" />
           <span>Scenarios</span>

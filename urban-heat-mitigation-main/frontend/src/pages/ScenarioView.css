@@ -277,12 +277,16 @@
   font-weight: 500;
 }
 
-/* ─── Range Slider Input ──────────────────────────────────────── */
+/* ─── Range Slider Input (WCAG 2.2 AA Target Size >= 24px) ────────── */
 .range-slider {
   width: 100%;
+  height: 24px;
+  min-height: 24px;
   -webkit-appearance: none;
+  appearance: none;
   background: transparent;
-  margin: 4px 0 2px;
+  margin: 2px 0;
+  padding: 0;
 }
 
 .range-slider::-webkit-slider-thumb {

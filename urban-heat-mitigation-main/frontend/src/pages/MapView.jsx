@@ -31,12 +31,29 @@ const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/st
 const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
 // Colorblind-friendlier scientific 5-class temperature ramp (ColorBrewer RdYlBu)
-const TIER_COLORS = {
+export const TIER_COLORS = {
   critical: [215, 25, 28],    // #D7191C - critical heat anomaly
   high: [253, 174, 97],       // #FDAE61 - high heat anomaly
   moderate: [255, 255, 191],  // #FFFFBF - moderate heat anomaly
   normal: [171, 217, 233],    // #ABD9E9 - normal / baseline microclimate
   cool: [44, 123, 182]        // #2C7BB6 - cool microclimate sink
+};
+
+// Multi-channel accessible symbols for non-color dependent classification (WCAG 1.4.1)
+export const TIER_SYMBOLS = {
+  critical: '▲▲',
+  high: '▲',
+  moderate: '■',
+  normal: '○',
+  cool: '▼'
+};
+
+export const TIER_LABELS = {
+  critical: 'Critical',
+  high: 'High',
+  moderate: 'Moderate',
+  normal: 'Normal',
+  cool: 'Cool'
 };
 
 // Feature metadata for friendly names and units in SHAP inspector
@@ -194,16 +211,20 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
     [city]
   );
 
-  // Close inspector on Escape key
+  // Close inspector or mobile sheet on Escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setSelectedCell(null);
+        if (selectedCell) {
+          setSelectedCell(null);
+        } else if (isMobileKpiOpen) {
+          setIsMobileKpiOpen(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [selectedCell, isMobileKpiOpen]);
 
   // Dynamically compute baseline minimum LST across the city dataset for elevation scaling
   const minLst = useMemo(() => {
@@ -362,11 +383,13 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
           ? p.lst_mean - overview.mean_lst_c
           : 0;
       const deltaStr = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}°C vs city mean`;
-      const tierStr = p.tier?.toUpperCase() || 'NORMAL';
+      const tierKey = p.tier?.toLowerCase() || 'normal';
+      const tierSymbol = TIER_SYMBOLS[tierKey] || '■';
+      const tierName = (TIER_LABELS[tierKey] || tierKey).toUpperCase();
 
       return `Cell: ${p.grid_id}
 LST: ${p.lst_mean.toFixed(1)}°C (${deltaStr})
-Tier: ${tierStr}
+Classification: [${tierSymbol}] ${tierName}
 Click to pin local SHAP drivers`;
     },
     [overview]
@@ -415,19 +438,22 @@ Click to pin local SHAP drivers`;
               isMobile ? 'mobile-sheet' : ''
             }`}
             role="region"
-            aria-label={`Inspection details for cell ${selectedCell.grid_id}`}
+            aria-labelledby="inspector-cell-title"
           >
             {isMobile && <div className="mobile-sheet-handle" />}
 
             {/* Header with Cell ID, Tier Badge & Close Button */}
             <div className="inspector-header">
-              <div className="inspector-title-line">
-                <MapPin size={13} className="inspector-icon" />
+              <div className="inspector-title-line" id="inspector-cell-title">
+                <MapPin size={13} className="inspector-icon" aria-hidden="true" />
                 <span className="inspector-cell-id font-mono">{selectedCell.grid_id}</span>
                 <span
                   className={`inspector-tier-badge tier-${selectedCell.tier} font-mono`}
                   title={`Relative classification: ${selectedCell.tier}`}
                 >
+                  <span className="tier-symbol font-mono" aria-hidden="true">
+                    {TIER_SYMBOLS[selectedCell.tier?.toLowerCase()] || '■'}
+                  </span>{' '}
                   {selectedCell.tier?.toUpperCase()}
                 </span>
               </div>
@@ -436,7 +462,7 @@ Click to pin local SHAP drivers`;
                 className="inspector-close-btn"
                 onClick={() => setSelectedCell(null)}
                 title="Dismiss panel (Esc)"
-                aria-label="Dismiss panel"
+                aria-label="Dismiss cell details panel"
               >
                 <X size={13} />
               </button>
@@ -639,6 +665,8 @@ Click to pin local SHAP drivers`;
               className="methodology-link-btn"
               onClick={onOpenMethodology || (() => setShowMethodology(true))}
               title="Inspect data provenance, XGBoost model, and Landsat comparison"
+              aria-haspopup="dialog"
+              aria-label="Inspect data provenance and methodology documentation"
             >
               Methodology &amp; Limits ↗
             </button>
@@ -649,9 +677,11 @@ Click to pin local SHAP drivers`;
               <h3>
                 {overview.city}
                 <button
+                  type="button"
                   className="info-trigger"
                   onClick={() => setShowLstInfo(true)}
-                  aria-label="What does LST mean?"
+                  aria-label="What does Land Surface Temperature mean?"
+                  aria-haspopup="dialog"
                 >
                   <Info size={12} />
                 </button>
@@ -773,11 +803,13 @@ Click to pin local SHAP drivers`;
               <span className="legend-tick tick-right">≥{(overview.mean_lst_c + 3.0).toFixed(1)}°</span>
             </div>
 
-            {/* Multi-channel severity tier cards */}
-            <div className="legend-tier-grid">
+            {/* Multi-channel severity tier cards with visual symbols for colorblind accessibility */}
+            <div className="legend-tier-grid" role="group" aria-label="Thermal Anomaly Tiers">
               <div className="tier-cell">
                 <div className="tier-pill-head">
-                  <span className="tier-swatch" style={{ background: '#2C7BB6' }}></span>
+                  <span className="tier-swatch" style={{ background: '#2C7BB6' }} title="Cool sink">
+                    <span className="tier-glyph font-mono" aria-hidden="true">▼</span>
+                  </span>
                   <span className="tier-name">Cool</span>
                 </div>
                 <span className="tier-delta font-mono">&lt;-1.5°</span>
@@ -785,7 +817,9 @@ Click to pin local SHAP drivers`;
               </div>
               <div className="tier-cell">
                 <div className="tier-pill-head">
-                  <span className="tier-swatch" style={{ background: '#ABD9E9' }}></span>
+                  <span className="tier-swatch" style={{ background: '#ABD9E9' }} title="Normal baseline">
+                    <span className="tier-glyph font-mono" aria-hidden="true">○</span>
+                  </span>
                   <span className="tier-name">Normal</span>
                 </div>
                 <span className="tier-delta font-mono">±0.0°</span>
@@ -793,7 +827,9 @@ Click to pin local SHAP drivers`;
               </div>
               <div className="tier-cell">
                 <div className="tier-pill-head">
-                  <span className="tier-swatch" style={{ background: '#FFFFBF' }}></span>
+                  <span className="tier-swatch" style={{ background: '#FFFFBF' }} title="Moderate elevated">
+                    <span className="tier-glyph font-mono" aria-hidden="true">■</span>
+                  </span>
                   <span className="tier-name">Mod.</span>
                 </div>
                 <span className="tier-delta font-mono">+1.5°</span>
@@ -801,7 +837,9 @@ Click to pin local SHAP drivers`;
               </div>
               <div className="tier-cell">
                 <div className="tier-pill-head">
-                  <span className="tier-swatch" style={{ background: '#FDAE61' }}></span>
+                  <span className="tier-swatch" style={{ background: '#FDAE61' }} title="High heat stress">
+                    <span className="tier-glyph font-mono" aria-hidden="true">▲</span>
+                  </span>
                   <span className="tier-name">High</span>
                 </div>
                 <span className="tier-delta font-mono">+3.0°</span>
@@ -809,7 +847,9 @@ Click to pin local SHAP drivers`;
               </div>
               <div className="tier-cell">
                 <div className="tier-pill-head">
-                  <span className="tier-swatch" style={{ background: '#D7191C' }}></span>
+                  <span className="tier-swatch" style={{ background: '#D7191C' }} title="Critical severe heat">
+                    <span className="tier-glyph font-mono" aria-hidden="true">▲▲</span>
+                  </span>
                   <span className="tier-name">Crit.</span>
                 </div>
                 <span className="tier-delta font-mono">≥+3.0°</span>

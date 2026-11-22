@@ -679,3 +679,41 @@
     gap: 6px;
   }
 }
+
+/* Accessible Keyboard Feature Selector */
+.accessible-feature-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+
+.accessible-picker-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.accessible-feature-select {
+  flex: 1;
+  background: var(--surface-1);
+  color: var(--text-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11.5px;
+  cursor: pointer;
+  outline: none;
+}
+
+.accessible-feature-select:focus-visible {
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
