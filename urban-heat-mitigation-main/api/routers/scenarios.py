@@ -39,11 +39,7 @@ async def simulate_scenario(request: ScenarioRequest, city_id: str = Depends(get
 @router.get("/presets", response_model=list[PresetScenario])
 async def get_presets(city_id: str = Depends(get_city_id)):
     """
-    Returns list of pre-computed scenario summaries for one city.
+    Returns list of pre-computed scenario summaries for one city (cached).
     """
-    presets_file = city_presets_file(city_id)
-    if not presets_file.exists():
-        return []
-
-    with open(presets_file) as f:
-        return json.load(f)
+    from models.simulate import load_preset_scenarios
+    return load_preset_scenarios(city_id)

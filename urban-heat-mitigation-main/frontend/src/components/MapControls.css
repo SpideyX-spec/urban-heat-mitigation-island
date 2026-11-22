@@ -5,25 +5,24 @@
   z-index: 15;
   display: flex;
   flex-direction: column;
-  background: var(--panel-bg-solid);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   user-select: none;
 }
 
 .map-ctrl-btn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--overlay-4);
-  color: var(--text-secondary);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
   cursor: pointer;
   padding: 0;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -35,13 +34,13 @@
 }
 
 .map-ctrl-btn:hover:not(:disabled) {
-  background: var(--overlay-4);
-  color: var(--text-primary);
+  background: var(--surface-2);
+  color: var(--text-1);
 }
 
 .map-ctrl-btn:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
+  outline: 1px solid var(--text-1);
+  outline-offset: -1px;
   z-index: 2;
 }
 
@@ -51,24 +50,23 @@
 }
 
 .map-ctrl-btn:active:not(:disabled) {
-  background: var(--overlay-6);
-  transform: translateY(0.5px);
+  background: var(--surface-3);
 }
 
 .map-ctrl-divider {
   height: 1px;
-  background: var(--overlay-4);
+  background: var(--line);
   margin: 0;
 }
 
 /* Compass indicator */
 .compass-btn.is-rotated {
-  color: var(--accent-primary);
+  color: var(--text-1);
 }
 
 /* 2D / 3D Toggle Badge */
 .dimension-badge {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -76,12 +74,12 @@
 }
 
 .perspective-btn.is-3d {
-  color: var(--accent-primary);
+  color: var(--text-1);
 }
 
 .perspective-btn.is-3d .dimension-badge {
-  background: var(--overlay-3);
+  background: var(--surface-2);
   padding: 2px 4px;
-  border-radius: 3px;
-  border: 1px solid var(--overlay-5);
+  border-radius: 2px;
+  border: 1px solid var(--line-strong);
 }

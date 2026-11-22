@@ -3,37 +3,194 @@ Cooling Scenario Simulation Engine
 
 Modifies feature vectors per intervention rules, re-predicts LST
 using the trained model, and computes cooling deltas.
+Includes thread-safe application-level caching for models, scalers,
+and city feature datasets.
 """
 
 import json
+import logging
+import threading
+from pathlib import Path
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
 from pipeline.config import (
     MODEL_FILE, SCALER_FILE, MODEL_DIR,
     INTERVENTIONS, city_features_file, city_presets_file
 )
 
+logger = logging.getLogger("uvicorn.error")
+
+# ─── Thread-Safe Application Cache ──────────────────────────────
+_cache_lock = threading.Lock()
+
+_model_cache = None          # loaded xgb.XGBRegressor
+_scaler_cache = None         # loaded joblib scaler
+_feature_names_cache = None  # list of feature column names
+_city_cache = {}             # city_id -> cached baseline dict
+_presets_cache = {}          # city_id -> cached presets list
+
+
+def classify_lst(lst: float, mean: float, std: float) -> str:
+    """Classify a temperature value into heat tiers relative to city baseline."""
+    if lst > mean + 2 * std:
+        return "critical"
+    elif lst > mean + 1 * std:
+        return "high"
+    elif lst > mean:
+        return "moderate"
+    elif lst > mean - 1 * std:
+        return "normal"
+    else:
+        return "cool"
+
+
+def get_shared_resources(force_reload: bool = False):
+    """
+    Thread-safe access to shared model artifacts: (model, scaler, feature_names).
+    Loads once on first use and caches in memory.
+    """
+    global _model_cache, _scaler_cache, _feature_names_cache
+
+    if not force_reload and _model_cache is not None and _scaler_cache is not None and _feature_names_cache is not None:
+        return _model_cache, _scaler_cache, _feature_names_cache
+
+    with _cache_lock:
+        if not force_reload and _model_cache is not None and _scaler_cache is not None and _feature_names_cache is not None:
+            return _model_cache, _scaler_cache, _feature_names_cache
+
+        if not MODEL_FILE.exists():
+            raise FileNotFoundError(f"Trained model artifact not found at {MODEL_FILE}")
+        if not SCALER_FILE.exists():
+            raise FileNotFoundError(f"Scaler artifact not found at {SCALER_FILE}")
+
+        feature_names_file = MODEL_DIR / "feature_names.json"
+        if not feature_names_file.exists():
+            raise FileNotFoundError(f"Feature names file not found at {feature_names_file}")
+
+        import xgboost as xgb
+        import joblib
+
+        logger.info(f"Loading shared model artifacts into cache from {MODEL_DIR}...")
+        model = xgb.XGBRegressor()
+        model.load_model(str(MODEL_FILE))
+
+        scaler = joblib.load(SCALER_FILE)
+
+        with open(feature_names_file, "r") as f:
+            feature_names = json.load(f)
+
+        _model_cache = model
+        _scaler_cache = scaler
+        _feature_names_cache = feature_names
+
+        return _model_cache, _scaler_cache, _feature_names_cache
+
+
+def get_city_simulation_data(city_id: str, force_reload: bool = False) -> dict:
+    """
+    Thread-safe access to cached city features, precomputed baseline predictions,
+    and tier classifications.
+    """
+    if not force_reload and city_id in _city_cache:
+        return _city_cache[city_id]
+
+    with _cache_lock:
+        if not force_reload and city_id in _city_cache:
+            return _city_cache[city_id]
+
+        feat_path = city_features_file(city_id)
+        if not feat_path.exists():
+            raise FileNotFoundError(f"Features file for city '{city_id}' not found at {feat_path}")
+
+        model, scaler, feature_names = get_shared_resources()
+
+        logger.info(f"Loading and precomputing baseline for city '{city_id}' into cache...")
+        features_df = pd.read_parquet(feat_path)
+        grid_ids = features_df["grid_id"].values
+
+        # Precompute baseline predictions once per city
+        X_original = features_df[feature_names].fillna(0)
+        X_orig_scaled = scaler.transform(X_original)
+        lst_original = model.predict(X_orig_scaled)
+
+        mean_lst_orig = float(lst_original.mean())
+        std_lst_orig = float(lst_original.std())
+
+        tiers_before = [classify_lst(l, mean_lst_orig, std_lst_orig) for l in lst_original]
+        default_targets = [
+            gid for gid, t in zip(grid_ids, tiers_before) if t in ("critical", "high")
+        ]
+
+        city_data = {
+            "features_df": features_df,
+            "grid_ids": grid_ids,
+            "lst_original": lst_original,
+            "mean_lst_orig": mean_lst_orig,
+            "std_lst_orig": std_lst_orig,
+            "tiers_before": tiers_before,
+            "default_targets": default_targets,
+        }
+
+        _city_cache[city_id] = city_data
+        return city_data
+
 
 def load_model_and_data(city_id: str):
-    """Load the (shared, multi-city) trained model + scaler, and this
-    city's own feature data."""
-    import xgboost as xgb
-    import joblib
+    """
+    Backwards-compatible loader backed by the in-memory cache.
+    Returns (model, scaler, features_df, feature_names).
+    """
+    model, scaler, feature_names = get_shared_resources()
+    city_data = get_city_simulation_data(city_id)
+    return model, scaler, city_data["features_df"], feature_names
 
-    model = xgb.XGBRegressor()
-    model.load_model(str(MODEL_FILE))
 
-    scaler = joblib.load(SCALER_FILE)
+def preload_resources(cities: Optional[list[str]] = None) -> dict:
+    """
+    Preload model artifacts and optional city datasets into memory.
+    Handles missing files and errors gracefully without crashing the application.
+    """
+    status = {
+        "model_loaded": False,
+        "scaler_loaded": False,
+        "preloaded_cities": [],
+        "errors": []
+    }
 
-    features_df = pd.read_parquet(city_features_file(city_id))
+    try:
+        get_shared_resources()
+        status["model_loaded"] = True
+        status["scaler_loaded"] = True
+    except Exception as e:
+        err_msg = f"Failed to preload shared ML model artifacts: {e}"
+        logger.warning(err_msg)
+        status["errors"].append(err_msg)
 
-    feature_names_file = MODEL_DIR / "feature_names.json"
-    with open(feature_names_file) as f:
-        feature_names = json.load(f)
+    if cities:
+        for c in cities:
+            try:
+                get_city_simulation_data(c)
+                status["preloaded_cities"].append(c)
+            except Exception as e:
+                err_msg = f"Failed to preload city '{c}': {e}"
+                logger.warning(err_msg)
+                status["errors"].append(err_msg)
 
-    return model, scaler, features_df, feature_names
+    return status
+
+
+def clear_simulation_cache():
+    """Clear all in-memory caches (used for tests or reloading updated artifacts)."""
+    global _model_cache, _scaler_cache, _feature_names_cache
+    with _cache_lock:
+        _model_cache = None
+        _scaler_cache = None
+        _feature_names_cache = None
+        _city_cache.clear()
+        _presets_cache.clear()
 
 
 def apply_intervention(features: pd.DataFrame, intervention: str,
@@ -94,7 +251,7 @@ def simulate_scenario(city_id: str, interventions: dict[str, float],
                       target_cells: list[str] = None) -> dict:
     """
     Simulate a complete cooling scenario for one city, with one or more
-    interventions.
+    interventions. Reuses cached model, scaler, and baseline data.
 
     Args:
         city_id: which city's feature data to simulate on
@@ -104,45 +261,26 @@ def simulate_scenario(city_id: str, interventions: dict[str, float],
     Returns:
         Scenario results dict with summary and per-cell details
     """
-    model, scaler, features_df, feature_names = load_model_and_data(city_id)
-    grid_ids = features_df["grid_id"].values
+    model, scaler, feature_names = get_shared_resources()
+    city_data = get_city_simulation_data(city_id)
 
-    # ─── Baseline prediction (always needed before we can even decide
-    #     which cells count as "hotspots" right now) ───
-    X_original = features_df[feature_names].fillna(0)
-    X_orig_scaled = scaler.transform(X_original)
-    lst_original = model.predict(X_orig_scaled)
+    features_df = city_data["features_df"]
+    grid_ids = city_data["grid_ids"]
+    lst_original = city_data["lst_original"]
+    mean_lst_orig = city_data["mean_lst_orig"]
+    std_lst_orig = city_data["std_lst_orig"]
+    tiers_before = city_data["tiers_before"]
 
-    mean_lst_orig = lst_original.mean()
-    std_lst_orig = lst_original.std()
-
-    def classify(lst, mean, std):
-        if lst > mean + 2 * std:
-            return "critical"
-        elif lst > mean + 1 * std:
-            return "high"
-        elif lst > mean:
-            return "moderate"
-        elif lst > mean - 1 * std:
-            return "normal"
-        else:
-            return "cool"
-
-    tiers_before = [classify(l, mean_lst_orig, std_lst_orig) for l in lst_original]
-
-    # ─── Resolve the target-cell set ONCE, from this same baseline,
-    #     so "which cells get modified" and "which cells count as
-    #     hotspots" can never disagree with each other ───
+    # Resolve target cells
     if target_cells:
         resolved_targets = list(target_cells)
     else:
-        resolved_targets = [
-            gid for gid, t in zip(grid_ids, tiers_before) if t in ("critical", "high")
-        ]
+        resolved_targets = city_data["default_targets"]
+
     target_mask = np.isin(grid_ids, resolved_targets)
     n_target = int(target_mask.sum())
 
-    # Apply all interventions using that exact same target set
+    # Apply all interventions on a fresh copy of the cached features
     modified_df = features_df.copy()
     for intervention, intensity in interventions.items():
         modified_df = apply_intervention(modified_df, intervention, intensity, resolved_targets)
@@ -153,7 +291,7 @@ def simulate_scenario(city_id: str, interventions: dict[str, float],
     lst_modified = model.predict(X_mod_scaled)
 
     delta_t = lst_modified - lst_original
-    tiers_after = [classify(l, mean_lst_orig, std_lst_orig) for l in lst_modified]
+    tiers_after = [classify_lst(l, mean_lst_orig, std_lst_orig) for l in lst_modified]
 
     hotspots_before = sum(1 for t in tiers_before if t in ["critical", "high"])
     hotspots_after = sum(1 for t in tiers_after if t in ["critical", "high"])
@@ -166,14 +304,9 @@ def simulate_scenario(city_id: str, interventions: dict[str, float],
         if k in INTERVENTIONS
     )
 
-    # Mean/max cooling computed ONLY over the targeted cells. Averaging
-    # across the full city (most of which were never touched and have
-    # delta_t == 0) drowns out the real per-cell effect of the
-    # intervention, so we report the number that actually answers
-    # "how much did the cells we intervened on cool down".
     delta_t_targeted = delta_t[target_mask] if n_target > 0 else delta_t
 
-    # Build cell results (vectorized — avoids 10k+ row-by-row .iloc calls)
+    # Build cell results (vectorized)
     cell_results = [
         {
             "grid_id": gid,
@@ -207,10 +340,15 @@ def simulate_scenario(city_id: str, interventions: dict[str, float],
     }
 
 
-def load_preset_scenarios(city_id: str):
-    """Load pre-computed scenario results for one city."""
+def load_preset_scenarios(city_id: str, force_reload: bool = False):
+    """Load pre-computed scenario results for one city, cached in memory."""
+    if not force_reload and city_id in _presets_cache:
+        return _presets_cache[city_id]
+
     presets_file = city_presets_file(city_id)
     if not presets_file.exists():
         return []
-    with open(presets_file) as f:
-        return json.load(f)
+    with open(presets_file, "r") as f:
+        data = json.load(f)
+    _presets_cache[city_id] = data
+    return data

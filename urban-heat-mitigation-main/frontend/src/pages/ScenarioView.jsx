@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
-import { Info } from 'lucide-react';
+import { Info, Trees, Building2, Leaf, Droplets, SunMedium, Play } from 'lucide-react';
 import { FlyToInterpolator } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE } from '../api';
@@ -16,11 +16,11 @@ const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/st
 const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
 const INTERVENTIONS = [
-  { id: 'tree_cover', label: 'Tree Cover', icon: '🌳', maxImpact: 'High' },
-  { id: 'cool_roofs', label: 'Cool Roofs', icon: '🏢', maxImpact: 'Medium' },
-  { id: 'green_roofs', label: 'Green Roofs', icon: '🌿', maxImpact: 'Medium' },
-  { id: 'water_bodies', label: 'Water Bodies', icon: '💧', maxImpact: 'Low' },
-  { id: 'albedo_improvement', label: 'Albedo', icon: '⬜', maxImpact: 'High' }
+  { id: 'tree_cover', label: 'Tree Cover', icon: Trees, maxImpact: 'High' },
+  { id: 'cool_roofs', label: 'Cool Roofs', icon: Building2, maxImpact: 'Medium' },
+  { id: 'green_roofs', label: 'Green Roofs', icon: Leaf, maxImpact: 'Medium' },
+  { id: 'water_bodies', label: 'Water Bodies', icon: Droplets, maxImpact: 'Low' },
+  { id: 'albedo_improvement', label: 'Albedo', icon: SunMedium, maxImpact: 'High' }
 ];
 
 const EMPTY_INTENSITIES = {
@@ -263,22 +263,25 @@ export default function ScenarioView({ city, cityInfo }) {
           </div>
 
           <div className="sliders-container">
-            {INTERVENTIONS.map(inv => (
-              <div key={inv.id} className="slider-group">
-                <div className="slider-label">
-                  <span className="icon">{inv.icon}</span>
-                  <span className="name">{inv.label}</span>
-                  <span className="value">{(intensities[inv.id] * 100).toFixed(0)}%</span>
+            {INTERVENTIONS.map(inv => {
+              const IconComp = inv.icon;
+              return (
+                <div key={inv.id} className="slider-group">
+                  <div className="slider-label">
+                    <span className="icon"><IconComp size={14} /></span>
+                    <span className="name">{inv.label}</span>
+                    <span className="value">{(intensities[inv.id] * 100).toFixed(0)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0" max="1" step="0.05"
+                    value={intensities[inv.id]}
+                    onChange={(e) => handleSliderChange(inv.id, e.target.value)}
+                    className="range-slider"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="0" max="1" step="0.05"
-                  value={intensities[inv.id]}
-                  onChange={(e) => handleSliderChange(inv.id, e.target.value)}
-                  className="range-slider"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <button
@@ -287,7 +290,14 @@ export default function ScenarioView({ city, cityInfo }) {
             disabled={isSimulating || !hasActiveIntervention}
             title={!hasActiveIntervention ? 'Move at least one slider first' : undefined}
           >
-            {isSimulating ? 'Simulating...' : '▶ Run Simulation'}
+            {isSimulating ? (
+              'Simulating...'
+            ) : (
+              <>
+                <Play size={13} className="btn-icon" />
+                <span>Run Simulation</span>
+              </>
+            )}
           </button>
 
           {statusMessage && (

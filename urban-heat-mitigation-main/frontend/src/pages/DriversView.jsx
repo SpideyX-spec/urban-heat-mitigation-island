@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import { API_BASE } from '../api';
 import './DriversView.css';
 
@@ -112,7 +113,7 @@ export default function DriversView({ city, cityInfo }) {
                         return null;
                       }}
                     />
-                    <Bar dataKey="importance" radius={[0, 4, 4, 0]} barSize={24}>
+                    <Bar dataKey="importance" radius={[0, 2, 2, 0]} barSize={20}>
                       {driversData.slice(0, 10).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.direction === 'positive' ? 'var(--tier-critical)' : 'var(--tier-cool)'} />
                       ))}
@@ -130,14 +131,18 @@ export default function DriversView({ city, cityInfo }) {
             <div className="info-card glass-panel">
               <h3>Interpretation</h3>
               <div className="insight-item">
-                <div className="insight-icon heating">↑</div>
+                <div className="insight-icon heating" aria-hidden="true">
+                  <ArrowUp size={14} />
+                </div>
                 <div>
                   <strong>Heating Factors</strong>
                   <p>Features like Impervious Surfaces and Building Density trap heat and raise temperatures.</p>
                 </div>
               </div>
               <div className="insight-item">
-                <div className="insight-icon cooling">↓</div>
+                <div className="insight-icon cooling" aria-hidden="true">
+                  <ArrowDown size={14} />
+                </div>
                 <div>
                   <strong>Cooling Factors</strong>
                   <p>Vegetation (NDVI) and Water Bodies act as natural heat sinks, lowering local temperatures.</p>

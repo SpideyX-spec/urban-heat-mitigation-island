@@ -2,6 +2,8 @@
 FastAPI application entrypoint for the Urban Heat MVP.
 """
 
+from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -12,10 +14,35 @@ from api.routers import grid, hotspots, drivers, scenarios
 from api.schemas import OverviewResponse
 import json
 
+logger = logging.getLogger("uvicorn.info")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Safe application lifecycle: warms up shared ML model artifacts and the
+    default city's baseline features during server boot.
+    """
+    try:
+        from models.simulate import preload_resources
+        status = preload_resources(cities=[DEFAULT_CITY])
+        logger.info(
+            f"Startup preload complete: model={status['model_loaded']}, "
+            f"cities={status['preloaded_cities']}"
+        )
+        if status["errors"]:
+            logger.warning(f"Startup preload warnings: {status['errors']}")
+    except Exception as e:
+        logger.warning(f"Startup preloading skipped or failed (will load lazily): {e}")
+
+    yield
+
+
 app = FastAPI(
     title="Urban Heat MVP API",
     description="API for the Urban Heat Mitigation & Cooling Strategies MVP",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend

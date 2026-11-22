@@ -6,13 +6,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--panel-bg-solid);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 3px 8px;
+  padding: 2px 6px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text-3);
   box-shadow: var(--shadow-sm);
   pointer-events: auto;
   user-select: none;
@@ -20,17 +19,17 @@
 }
 
 .map-attribution-bar a {
-  color: var(--text-secondary);
+  color: var(--text-2);
   text-decoration: underline;
   text-underline-offset: 2px;
   transition: color 0.15s ease;
 }
 
 .map-attribution-bar a:hover {
-  color: var(--text-primary);
+  color: var(--text-1);
 }
 
 .attribution-sep {
-  color: var(--text-muted);
+  color: var(--text-3);
   opacity: 0.6;
 }

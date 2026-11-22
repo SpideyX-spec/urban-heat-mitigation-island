@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Map, BarChart2, Layers, ChevronDown, Sun, Moon, Info, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Map, BarChart2, Layers, ChevronDown, Sun, Moon, Info, PanelLeftClose, PanelLeftOpen, Flame } from 'lucide-react';
 import './App.css';
 import { API_BASE } from './api';
 import { useTheme } from './ThemeContext';
@@ -57,7 +57,9 @@ function App() {
       {/* Sidebar Navigation */}
       <aside className={`sidebar glass-panel${sidebarCollapsed ? ' collapsed' : ''}`}>
         <div className="sidebar-header">
-          <div className="logo-icon">🔥</div>
+          <div className="logo-icon" aria-hidden="true">
+            <Flame size={16} />
+          </div>
           <div className="logo-text">
             <h2>Urban Heat</h2>
             <p>Urban Heat Island Tracker</p>
