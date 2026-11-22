@@ -24,7 +24,7 @@ from pipeline.config import (
 logger = logging.getLogger("uvicorn.error")
 
 # ─── Thread-Safe Application Cache ──────────────────────────────
-_cache_lock = threading.Lock()
+_cache_lock = threading.RLock()
 
 _model_cache = None          # loaded xgb.XGBRegressor
 _scaler_cache = None         # loaded joblib scaler
@@ -272,8 +272,13 @@ def simulate_scenario(city_id: str, interventions: dict[str, float],
     tiers_before = city_data["tiers_before"]
 
     # Resolve target cells
-    if target_cells:
-        resolved_targets = list(target_cells)
+    if target_cells is not None:
+        if isinstance(target_cells, str) and target_cells.lower() in ("all", "entire_city", "all_cells", "city"):
+            resolved_targets = list(grid_ids)
+        elif len(target_cells) == 1 and str(target_cells[0]).lower() in ("all", "entire_city", "all_cells", "city"):
+            resolved_targets = list(grid_ids)
+        else:
+            resolved_targets = list(target_cells)
     else:
         resolved_targets = city_data["default_targets"]
 

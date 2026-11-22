@@ -104,6 +104,29 @@ class TestScenarioSimulationCaching(unittest.TestCase):
         modified_gids = {r["grid_id"] for r in result["cell_results"] if r["delta_t"] != 0}
         self.assertTrue(modified_gids.issubset(set(some_targets)))
 
+    def test_targeting_scopes_hotspots_vs_all(self):
+        """Test default hotspots targeting vs entire-city targeting."""
+        city_data = get_city_simulation_data("new_delhi")
+        total_cells = len(city_data["grid_ids"])
+        hotspots_count = len(city_data["default_targets"])
+
+        # Scope 1: Default Hotspots (None)
+        res_hotspots = simulate_scenario(
+            city_id="new_delhi",
+            interventions={"tree_cover": 0.5},
+            target_cells=None
+        )
+        self.assertEqual(res_hotspots["summary"]["cells_modified"], hotspots_count)
+
+        # Scope 2: Entire City (["all"])
+        res_all = simulate_scenario(
+            city_id="new_delhi",
+            interventions={"tree_cover": 0.5},
+            target_cells=["all"]
+        )
+        self.assertEqual(res_all["summary"]["cells_modified"], total_cells)
+        self.assertGreater(res_all["summary"]["cost_estimate_m"], res_hotspots["summary"]["cost_estimate_m"])
+
     def test_performance_speedup(self):
         """Benchmark cold run vs warm cached run to demonstrate latency improvement."""
         interventions = {"tree_cover": 0.3}

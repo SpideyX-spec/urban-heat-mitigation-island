@@ -2,7 +2,25 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
-import { Info, Trees, Building2, Leaf, Droplets, SunMedium, Play } from 'lucide-react';
+import {
+  Info,
+  Trees,
+  Building2,
+  Leaf,
+  Droplets,
+  SunMedium,
+  Play,
+  RotateCcw,
+  Target,
+  RefreshCw,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  Sliders,
+  Layers,
+  Sparkles
+} from 'lucide-react';
 import { FlyToInterpolator } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE } from '../api';
@@ -15,16 +33,129 @@ import './ScenarioView.css';
 const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
-const INTERVENTIONS = [
-  { id: 'tree_cover', label: 'Tree Cover', icon: Trees, maxImpact: 'High' },
-  { id: 'cool_roofs', label: 'Cool Roofs', icon: Building2, maxImpact: 'Medium' },
-  { id: 'green_roofs', label: 'Green Roofs', icon: Leaf, maxImpact: 'Medium' },
-  { id: 'water_bodies', label: 'Water Bodies', icon: Droplets, maxImpact: 'Low' },
-  { id: 'albedo_improvement', label: 'Albedo', icon: SunMedium, maxImpact: 'High' }
+// Detailed intervention definitions reflecting the underlying ML feature modification parameters
+// defined in pipeline/config.py (INTERVENTIONS dictionary)
+const INTERVENTIONS_CONFIG = [
+  {
+    id: 'tree_cover',
+    label: 'Tree Canopy Cover',
+    shortLabel: 'Tree Cover',
+    icon: Trees,
+    unit: 'canopy %',
+    costPerKm2: 2.5,
+    tagline: 'Urban street trees & canopy density',
+    description: 'Increases vegetated fraction and canopy density while displacing impervious surface area in targeted cells.',
+    modelFeatures: 'frac_vegetation (+30%), ndvi_mean (+0.15), tree_canopy_frac (+30%), frac_impervious (-15%)',
+    getPhysicalShift: (x) => {
+      if (x <= 0) return '0% — Baseline canopy';
+      const veg = (30 * x).toFixed(1);
+      const imp = (15 * x).toFixed(1);
+      const ndvi = (0.15 * x).toFixed(3);
+      return `+${veg}% Canopy/Veg, -${imp}% Impervious, +${ndvi} NDVI`;
+    },
+    benchmarks: [
+      { pct: '0%', title: 'Baseline', detail: 'Existing urban tree canopy; 0% parameter modification.' },
+      { pct: '50%', title: 'Moderate (+15% Canopy)', detail: '+15% tree canopy & vegetation fraction, -7.5% impervious surface, +0.075 NDVI.' },
+      { pct: '100%', title: 'Maximum (+30% Canopy)', detail: '+30% canopy density, +30% vegetation cover, -15% impervious surface, +0.150 NDVI.' }
+    ]
+  },
+  {
+    id: 'cool_roofs',
+    label: 'Cool Roof Retrofits',
+    shortLabel: 'Cool Roofs',
+    icon: Building2,
+    unit: 'reflectance %',
+    costPerKm2: 1.5,
+    tagline: 'High-albedo reflective roof coatings',
+    description: 'Applies reflective elastomeric coatings to roofs, reducing net absorbed solar radiation and lowering built-up index.',
+    modelFeatures: 'solar_radiation (-15%), ndbi_mean (-0.12)',
+    getPhysicalShift: (x) => {
+      if (x <= 0) return '0% — Baseline roof albedo';
+      const sol = (15 * x).toFixed(1);
+      const ndbi = (0.12 * x).toFixed(3);
+      return `-${sol}% Solar Absorption, -${ndbi} Built-up Index (NDBI)`;
+    },
+    benchmarks: [
+      { pct: '0%', title: 'Baseline', detail: 'Conventional low-reflectance commercial and residential rooftops.' },
+      { pct: '50%', title: 'Moderate (-7.5% Solar)', detail: '-7.5% net surface solar absorption, -0.060 built-up index (NDBI).' },
+      { pct: '100%', title: 'Maximum (-15% Solar)', detail: '-15% net surface solar absorption, -0.120 built-up index (NDBI).' }
+    ]
+  },
+  {
+    id: 'green_roofs',
+    label: 'Green Roof Systems',
+    shortLabel: 'Green Roofs',
+    icon: Leaf,
+    unit: 'rooftop veg %',
+    costPerKm2: 4.0,
+    tagline: 'Extensive vegetative roof installations',
+    description: 'Installs living plants on flat rooftops to promote evapotranspiration and replace impervious surfaces.',
+    modelFeatures: 'frac_vegetation (+15%), ndbi_mean (-0.08), frac_impervious (-10%)',
+    getPhysicalShift: (x) => {
+      if (x <= 0) return '0% — Baseline roof cover';
+      const veg = (15 * x).toFixed(1);
+      const imp = (10 * x).toFixed(1);
+      const ndbi = (0.08 * x).toFixed(3);
+      return `+${veg}% Rooftop Veg, -${imp}% Impervious, -${ndbi} NDBI`;
+    },
+    benchmarks: [
+      { pct: '0%', title: 'Baseline', detail: 'Standard non-vegetated roof structures.' },
+      { pct: '50%', title: 'Moderate (+7.5% Veg)', detail: '+7.5% rooftop vegetation, -5% impervious surface, -0.040 NDBI.' },
+      { pct: '100%', title: 'Maximum (+15% Veg)', detail: '+15% rooftop vegetation cover, -10% impervious surface, -0.080 NDBI.' }
+    ]
+  },
+  {
+    id: 'water_bodies',
+    label: 'Water Bodies & Retention',
+    shortLabel: 'Water Bodies',
+    icon: Droplets,
+    unit: 'water area %',
+    costPerKm2: 6.0,
+    tagline: 'Urban wetlands, retention ponds & bioswales',
+    description: 'Introduces localized retention basins, swales, or open water, reducing cell distance to water and expanding water area.',
+    modelFeatures: 'water_area_frac (+5%), dist_to_water (-200m clamped to 50m)',
+    getPhysicalShift: (x) => {
+      if (x <= 0) return '0% — Baseline water distribution';
+      const area = (5 * x).toFixed(1);
+      const dist = Math.round(200 * x);
+      return `+${area}% Water Area, -${dist}m Distance to Nearest Water`;
+    },
+    benchmarks: [
+      { pct: '0%', title: 'Baseline', detail: 'Existing natural water bodies, lakes, and drainage channels.' },
+      { pct: '50%', title: 'Moderate (+2.5% Water)', detail: '+2.5% open water surface area fraction, -100m to nearest water feature.' },
+      { pct: '100%', title: 'Maximum (+5% Water)', detail: '+5% open water surface area fraction, -200m to nearest water feature (min 50m).' }
+    ]
+  },
+  {
+    id: 'albedo_improvement',
+    label: 'Pavement Albedo Upgrades',
+    shortLabel: 'Pavement Albedo',
+    icon: SunMedium,
+    unit: 'pavement albedo %',
+    costPerKm2: 1.0,
+    tagline: 'Permeable & reflective street pavements',
+    description: 'Upgrades roads, parking lots, and walkways with lighter reflective aggregates and permeable materials.',
+    modelFeatures: 'solar_radiation (-10%), ndbi_mean (-0.06)',
+    getPhysicalShift: (x) => {
+      if (x <= 0) return '0% — Baseline pavement albedo';
+      const sol = (10 * x).toFixed(1);
+      const ndbi = (0.06 * x).toFixed(3);
+      return `-${sol}% Solar Absorption, -${ndbi} Built-up Index (NDBI)`;
+    },
+    benchmarks: [
+      { pct: '0%', title: 'Baseline', detail: 'Standard dark weathered asphalt and dense concrete pavements.' },
+      { pct: '50%', title: 'Moderate (-5% Solar)', detail: '-5% net surface solar absorption, -0.030 built-up index (NDBI).' },
+      { pct: '100%', title: 'Maximum (-10% Solar)', detail: '-10% net surface solar absorption, -0.060 built-up index (NDBI).' }
+    ]
+  }
 ];
 
 const EMPTY_INTENSITIES = {
-  tree_cover: 0, cool_roofs: 0, green_roofs: 0, water_bodies: 0, albedo_improvement: 0
+  tree_cover: 0,
+  cool_roofs: 0,
+  green_roofs: 0,
+  water_bodies: 0,
+  albedo_improvement: 0
 };
 
 // Colorblind-friendlier scientific 5-class temperature ramp (ColorBrewer RdYlBu)
@@ -42,131 +173,191 @@ export default function ScenarioView({ city, cityInfo }) {
   const [gridData, setGridData] = useState(null);
   const [presets, setPresets] = useState([]);
   const [intensities, setIntensities] = useState(EMPTY_INTENSITIES);
+  const [targetScope, setTargetScope] = useState('hotspots'); // 'hotspots' | 'all'
   const [simulationResult, setSimulationResult] = useState(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [activePresetId, setActivePresetId] = useState(null);
-  // Feedback for cases that previously failed silently: no sliders
-  // moved, or the API call itself failing.
   const [statusMessage, setStatusMessage] = useState(null);
+  const [expandedExplanation, setExpandedExplanation] = useState(null);
+  const [showAssumptions, setShowAssumptions] = useState(false);
+  const [simDurationMs, setSimDurationMs] = useState(null);
 
+  // Load grid geometry and presets when city changes
   useEffect(() => {
     if (!city) return;
 
-    // Fetch grid geometry
     fetch(`${API_BASE}/api/v1/grid?city=${city}`)
-      .then(res => res.json())
-      .then(data => setGridData(data))
-      .catch(err => {
+      .then((res) => res.json())
+      .then((data) => setGridData(data))
+      .catch((err) => {
         console.error('Failed to load grid', err);
-        setStatusMessage({ type: 'error', text: 'Could not load the map for this city.' });
+        setStatusMessage({ type: 'error', text: 'Could not load grid geometry for this city.' });
       });
 
-    // Fetch presets
     fetch(`${API_BASE}/api/v1/scenarios/presets?city=${city}`)
-      .then(res => res.json())
-      .then(data => setPresets(data))
-      .catch(err => console.error('Failed to load presets', err));
+      .then((res) => res.json())
+      .then((data) => setPresets(data))
+      .catch((err) => console.error('Failed to load presets', err));
+
+    // Reset simulation state on city change
+    setSimulationResult(null);
+    setIntensities(EMPTY_INTENSITIES);
+    setActivePresetId(null);
+    setStatusMessage(null);
   }, [city]);
 
+  // Compute cell counts and areas
+  const totalCellsCount = gridData?.features?.length || 0;
+  const totalAreaKm2 = (totalCellsCount * 0.25).toFixed(1);
+
+  const hotspotsCount = useMemo(() => {
+    if (!gridData?.features) return 0;
+    return gridData.features.filter(
+      (f) => f.properties?.tier === 'critical' || f.properties?.tier === 'high'
+    ).length;
+  }, [gridData]);
+
+  const hotspotsAreaKm2 = (hotspotsCount * 0.25).toFixed(1);
+
+  const activeTargetCount = targetScope === 'all' ? totalCellsCount : hotspotsCount;
+  const activeTargetAreaKm2 = targetScope === 'all' ? totalAreaKm2 : hotspotsAreaKm2;
+
   const handleSliderChange = (id, value) => {
-    setIntensities(prev => ({ ...prev, [id]: parseFloat(value) }));
+    setIntensities((prev) => ({ ...prev, [id]: parseFloat(value) }));
     setActivePresetId(null);
   };
 
-  // Shared simulation runner — used by both the manual "Run Simulation"
-  // button (current slider state) and preset buttons (a fixed
-  // intervention set), so both paths behave identically and both
-  // actually update the After map.
-  const runInterventions = useCallback(async (interventionDict) => {
-    const activeInterventions = Object.entries(interventionDict)
-      .filter(([, intensity]) => intensity > 0)
-      .map(([type, intensity]) => ({ type, intensity }));
+  const handleResetSliders = () => {
+    setIntensities(EMPTY_INTENSITIES);
+    setActivePresetId(null);
+    setSimulationResult(null);
+    setStatusMessage({ type: 'info', text: 'Interventions reset to 0% (baseline conditions).' });
+  };
 
-    if (activeInterventions.length === 0) {
-      // Previously this just silently did nothing, which looked
-      // exactly like a broken button. Now it says so.
-      setSimulationResult(null);
-      setStatusMessage({ type: 'info', text: 'Move at least one slider above zero, or pick a preset, before running a simulation.' });
-      return;
-    }
+  // Shared simulation runner connecting to backend simulate_scenario
+  const runInterventions = useCallback(
+    async (interventionDict, chosenTargetScope = targetScope) => {
+      const activeInterventions = Object.entries(interventionDict)
+        .filter(([, intensity]) => intensity > 0)
+        .map(([type, intensity]) => ({ type, intensity }));
 
-    setIsSimulating(true);
-    setStatusMessage(null);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/scenarios/simulate?city=${city}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interventions: activeInterventions })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setSimulationResult(data);
-      } else {
-        const errBody = await res.json().catch(() => ({}));
-        setStatusMessage({ type: 'error', text: errBody.detail || 'Simulation failed. Please try again.' });
+      if (activeInterventions.length === 0) {
+        setSimulationResult(null);
+        setStatusMessage({
+          type: 'info',
+          text: 'Adjust at least one slider above 0%, or choose a preset, before running a simulation.'
+        });
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      setStatusMessage({ type: 'error', text: 'Could not reach the server. Is the backend running?' });
-    } finally {
-      setIsSimulating(false);
-    }
-  }, [city]);
+
+      setIsSimulating(true);
+      setStatusMessage(null);
+      const startTime = performance.now();
+
+      try {
+        const payload = {
+          interventions: activeInterventions,
+          target_cells: chosenTargetScope === 'all' ? ['all'] : null
+        };
+
+        const res = await fetch(`${API_BASE}/api/v1/scenarios/simulate?city=${city}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+        setSimDurationMs(elapsed);
+
+        if (res.ok) {
+          const data = await res.json();
+          setSimulationResult(data);
+          setStatusMessage({
+            type: 'success',
+            text: `Simulation complete in ${elapsed}ms: ${data.summary.cells_modified} cells re-evaluated.`
+          });
+        } else {
+          const errBody = await res.json().catch(() => ({}));
+          setStatusMessage({
+            type: 'error',
+            text: errBody.detail || 'Simulation request failed. Please check inputs.'
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        setStatusMessage({
+          type: 'error',
+          text: 'Could not connect to simulation service. Please verify the backend API is active.'
+        });
+      } finally {
+        setIsSimulating(false);
+      }
+    },
+    [city, targetScope]
+  );
 
   const runSimulation = () => {
     setActivePresetId(null);
-    runInterventions(intensities);
+    runInterventions(intensities, targetScope);
   };
 
   const loadPreset = (preset) => {
     const newIntensities = { ...EMPTY_INTENSITIES };
-    Object.entries(preset.interventions).forEach(([k, v]) => {
-      newIntensities[k] = v;
+    Object.entries(preset.interventions || {}).forEach(([k, v]) => {
+      if (k in newIntensities) newIntensities[k] = v;
     });
     setIntensities(newIntensities);
     setActivePresetId(preset.scenario_id);
 
-    if (Object.keys(preset.interventions).length === 0) {
-      // The "Baseline" preset has no interventions by design.
+    if (Object.keys(preset.interventions || {}).length === 0) {
       setSimulationResult(null);
-      setStatusMessage({ type: 'info', text: 'Baseline has no interventions applied — this is the current, unmodified city.' });
+      setStatusMessage({
+        type: 'info',
+        text: 'Baseline preset selected: No interventions applied (current unmodified city).'
+      });
       return;
     }
 
-    // Run the preset's interventions through the live simulator so the
-    // After map and the summary numbers are guaranteed consistent with
-    // each other (previously, presets only showed static precomputed
-    // stats and the After map never changed at all).
-    runInterventions(preset.interventions);
+    // Default presets run on hotspots; execute through live simulator
+    runInterventions(preset.interventions, targetScope);
   };
 
+  // Map of per-cell simulation results for instant lookup in tooltip & layer
+  const cellResultsMap = useMemo(() => {
+    if (!simulationResult?.cell_results) return {};
+    const map = {};
+    for (let i = 0; i < simulationResult.cell_results.length; i++) {
+      const r = simulationResult.cell_results[i];
+      map[r.grid_id] = r;
+    }
+    return map;
+  }, [simulationResult]);
+
   // Merge simulation results back into grid data for the "After" map
-  const getAfterGrid = () => {
-    if (!gridData || !simulationResult || !simulationResult.cell_results || simulationResult.cell_results.length === 0) {
+  const afterGridData = useMemo(() => {
+    if (!gridData || !simulationResult?.cell_results) {
       return gridData;
     }
 
-    const resultDict = {};
-    simulationResult.cell_results.forEach(r => {
-      resultDict[r.grid_id] = r;
-    });
-
     return {
       ...gridData,
-      features: gridData.features.map(f => {
-        const sim = resultDict[f.properties.grid_id];
+      features: gridData.features.map((f) => {
+        const sim = cellResultsMap[f.properties.grid_id];
         if (sim) {
           return {
             ...f,
-            properties: { ...f.properties, tier: sim.tier_after, lst_mean: sim.lst_after }
+            properties: {
+              ...f.properties,
+              tier: sim.tier_after,
+              lst_mean: sim.lst_after,
+              delta_t: sim.delta_t
+            }
           };
         }
         return f;
       })
     };
-  };
+  }, [gridData, simulationResult, cellResultsMap]);
 
   // Compute city baseline minimum for 3D elevation scaling
   const minLst = useMemo(() => {
@@ -181,6 +372,7 @@ export default function ScenarioView({ city, cityInfo }) {
     return 20;
   }, [gridData]);
 
+  // Controlled camera view state
   const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
   const [viewState, setViewState] = useState({
     longitude: centerLon,
@@ -192,6 +384,7 @@ export default function ScenarioView({ city, cityInfo }) {
 
   const is3D = (viewState?.pitch || 0) > 10;
 
+  // DeckGL Layers
   const beforeLayer = new GeoJsonLayer({
     id: 'before-layer',
     data: gridData,
@@ -200,11 +393,11 @@ export default function ScenarioView({ city, cityInfo }) {
     filled: true,
     extruded: is3D,
     wireframe: false,
-    getFillColor: d => {
+    getFillColor: (d) => {
       const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
       return [...color, 175];
     },
-    getElevation: d => {
+    getElevation: (d) => {
       const lst = d.properties?.lst_mean ?? minLst;
       const delta = Math.max(0, lst - minLst);
       return 40 + delta * 110;
@@ -218,17 +411,17 @@ export default function ScenarioView({ city, cityInfo }) {
 
   const afterLayer = new GeoJsonLayer({
     id: 'after-layer',
-    data: getAfterGrid(),
+    data: afterGridData,
     pickable: true,
     stroked: false,
     filled: true,
     extruded: is3D,
     wireframe: false,
-    getFillColor: d => {
+    getFillColor: (d) => {
       const color = TIER_COLORS[d.properties.tier] || [128, 128, 128];
       return [...color, 175];
     },
-    getElevation: d => {
+    getElevation: (d) => {
       const lst = d.properties?.lst_mean ?? minLst;
       const delta = Math.max(0, lst - minLst);
       return 40 + delta * 110;
@@ -240,10 +433,9 @@ export default function ScenarioView({ city, cityInfo }) {
     }
   });
 
-  // Synchronized camera state change handler for both Before and After maps
+  // Synchronized camera handler between Before and After maps
   const handleViewStateChange = useCallback(({ viewState: nv }) => {
-    setViewState(prev => {
-      // Epsilon comparison on spatial values to prevent unnecessary updates or feedback loops
+    setViewState((prev) => {
       if (
         Math.abs(prev.longitude - nv.longitude) < 0.0000001 &&
         Math.abs(prev.latitude - nv.latitude) < 0.0000001 &&
@@ -254,7 +446,6 @@ export default function ScenarioView({ city, cityInfo }) {
         return prev;
       }
 
-      // Omit instance-specific canvas dimensions (width/height) so maps do not distort each other
       return {
         ...prev,
         longitude: nv.longitude,
@@ -266,17 +457,16 @@ export default function ScenarioView({ city, cityInfo }) {
         minZoom: nv.minZoom ?? prev.minZoom,
         maxPitch: nv.maxPitch ?? prev.maxPitch,
         minPitch: nv.minPitch ?? prev.minPitch,
-        // Zero out transitions during direct user manipulation for 1:1 responsive tracking
         transitionDuration: 0,
         transitionInterpolator: undefined
       };
     });
   }, []);
 
-  // Keep camera centered when city changes
+  // Center camera when selected city changes
   useEffect(() => {
     if (cityInfo?.center) {
-      setViewState(prev => ({
+      setViewState((prev) => ({
         ...prev,
         longitude: cityInfo.center[0],
         latitude: cityInfo.center[1],
@@ -288,81 +478,270 @@ export default function ScenarioView({ city, cityInfo }) {
     }
   }, [city, cityInfo]);
 
-  const hasActiveIntervention = Object.values(intensities).some(v => v > 0);
+  const hasActiveIntervention = Object.values(intensities).some((v) => v > 0);
 
   return (
     <div className="page-container animate-fade-in">
       <div className="scenario-layout">
-
-        {/* Left Panel: Builder */}
+        {/* Left Panel: Scenario Builder & Parameter Tuning */}
         <div className="builder-panel glass-panel">
           <div className="panel-header">
-            <h2>Interventions</h2>
-            <p>Adjust intensity to simulate cooling{cityInfo ? ` in ${cityInfo.name}` : ''}.</p>
+            <div className="panel-title-row">
+              <Sliders size={16} className="panel-icon" />
+              <h2>Scenario Builder</h2>
+            </div>
+            <p className="panel-description">
+              Simulate cooling intervention scenarios for{' '}
+              <strong>{cityInfo?.name || city}</strong>. Modifies ML feature inputs to re-predict
+              Land Surface Temperature.
+            </p>
           </div>
 
-          <div className="sliders-container">
-            {INTERVENTIONS.map(inv => {
-              const IconComp = inv.icon;
-              return (
-                <div key={inv.id} className="slider-group">
-                  <div className="slider-label">
-                    <span className="icon"><IconComp size={14} /></span>
-                    <span className="name">{inv.label}</span>
-                    <span className="value">{(intensities[inv.id] * 100).toFixed(0)}%</span>
+          {/* Explicit Targeting Control */}
+          <div className="targeting-card">
+            <div className="targeting-header">
+              <Target size={14} className="targeting-icon" />
+              <span className="targeting-title">Spatial Targeting</span>
+              <span className="targeting-badge font-mono">
+                {activeTargetCount} cells · ~{activeTargetAreaKm2} km²
+              </span>
+            </div>
+
+            <div className="targeting-toggle-group">
+              <button
+                type="button"
+                className={`target-btn ${targetScope === 'hotspots' ? 'active' : ''}`}
+                onClick={() => setTargetScope('hotspots')}
+              >
+                <div className="target-btn-title">Hotspots Only</div>
+                <div className="target-btn-sub">Critical & High Tiers</div>
+              </button>
+
+              <button
+                type="button"
+                className={`target-btn ${targetScope === 'all' ? 'active' : ''}`}
+                onClick={() => setTargetScope('all')}
+              >
+                <div className="target-btn-title">Entire City</div>
+                <div className="target-btn-sub">All Grid Cells</div>
+              </button>
+            </div>
+
+            <p className="targeting-explanation">
+              {targetScope === 'hotspots' ? (
+                <>
+                  Applies interventions strictly to <strong>{hotspotsCount} hotspot cells</strong> (~
+                  {hotspotsAreaKm2} km²) where baseline LST exceeds <code>Mean + 1σ</code>. Moderate
+                  and cool cells remain unchanged, optimizing municipal cost efficiency.
+                </>
+              ) : (
+                <>
+                  Applies interventions uniformly across all <strong>{totalCellsCount} grid cells</strong> (~
+                  {totalAreaKm2} km²) within urban bounds. Models widespread city-wide infrastructure
+                  deployment at higher capital cost.
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* Intervention Sliders Container */}
+          <div className="sliders-section">
+            <div className="section-title-row">
+              <span className="section-title">Intervention Parameters</span>
+              <span className="section-note font-mono">0% to 100% Intensity</span>
+            </div>
+
+            <div className="sliders-container">
+              {INTERVENTIONS_CONFIG.map((inv) => {
+                const IconComp = inv.icon;
+                const value = intensities[inv.id] || 0;
+                const pct = Math.round(value * 100);
+                const isExpanded = expandedExplanation === inv.id;
+                const physicalShift = inv.getPhysicalShift(value);
+
+                return (
+                  <div key={inv.id} className={`slider-group ${value > 0 ? 'active-slider' : ''}`}>
+                    <div className="slider-header">
+                      <div className="slider-title-line">
+                        <span className="icon">
+                          <IconComp size={14} />
+                        </span>
+                        <span className="name">{inv.label}</span>
+                        <span className="value font-mono">{pct}%</span>
+                      </div>
+
+                      {/* Real-time Physical Input Change Readout */}
+                      <div className="physical-shift-readout font-mono">
+                        <span className="shift-label">Input Shift:</span>
+                        <span className={`shift-value ${value > 0 ? 'text-accent' : ''}`}>
+                          {physicalShift}
+                        </span>
+                      </div>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={value}
+                      onChange={(e) => handleSliderChange(inv.id, e.target.value)}
+                      className="range-slider"
+                      aria-label={`${inv.label} intensity`}
+                    />
+
+                    <div className="slider-footer">
+                      <button
+                        type="button"
+                        className="toggle-explanation-btn"
+                        onClick={() => setExpandedExplanation(isExpanded ? null : inv.id)}
+                        aria-expanded={isExpanded}
+                      >
+                        <HelpCircle size={11} />
+                        <span>What do 0%, 50%, 100% mean?</span>
+                        {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                      </button>
+                    </div>
+
+                    {/* Explanatory Benchmark Matrix */}
+                    {isExpanded && (
+                      <div className="benchmark-matrix animate-fade-in">
+                        <div className="benchmark-tagline">{inv.tagline}</div>
+                        <div className="benchmark-features">
+                          <strong>Model Features:</strong> <code>{inv.modelFeatures}</code>
+                        </div>
+                        <div className="benchmark-list">
+                          {inv.benchmarks.map((b) => (
+                            <div key={b.pct} className="benchmark-item">
+                              <span className="benchmark-pct font-mono">{b.pct}</span>
+                              <div className="benchmark-content">
+                                <strong>{b.title}</strong>
+                                <span>{b.detail}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <input
-                    type="range"
-                    min="0" max="1" step="0.05"
-                    value={intensities[inv.id]}
-                    onChange={(e) => handleSliderChange(inv.id, e.target.value)}
-                    className="range-slider"
-                  />
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
-          <button
-            className="btn-simulate"
-            onClick={runSimulation}
-            disabled={isSimulating || !hasActiveIntervention}
-            title={!hasActiveIntervention ? 'Move at least one slider first' : undefined}
-          >
-            {isSimulating ? (
-              'Simulating...'
-            ) : (
-              <>
-                <Play size={13} className="btn-icon" />
-                <span>Run Simulation</span>
-              </>
-            )}
-          </button>
+          {/* Action Buttons */}
+          <div className="actions-group">
+            <button
+              className="btn-simulate"
+              onClick={runSimulation}
+              disabled={isSimulating || !hasActiveIntervention}
+              title={
+                !hasActiveIntervention
+                  ? 'Adjust at least one slider above 0% to run simulation'
+                  : undefined
+              }
+            >
+              {isSimulating ? (
+                <>
+                  <RefreshCw size={14} className="spin-icon" />
+                  <span>Re-Predicting ({activeTargetCount} Cells)...</span>
+                </>
+              ) : (
+                <>
+                  <Play size={13} className="btn-icon" />
+                  <span>Run Simulation</span>
+                </>
+              )}
+            </button>
 
+            <button
+              className="btn-reset"
+              onClick={handleResetSliders}
+              disabled={isSimulating || !hasActiveIntervention}
+              title="Reset all sliders to baseline (0%)"
+            >
+              <RotateCcw size={13} />
+              <span>Reset</span>
+            </button>
+          </div>
+
+          {/* Status Message */}
           {statusMessage && (
-            <div className={`status-message status-${statusMessage.type}`}>
+            <div className={`status-message status-${statusMessage.type} animate-fade-in`}>
               {statusMessage.text}
             </div>
           )}
 
+          {/* Presets Section */}
           <div className="presets-section">
-            <h3>Presets</h3>
+            <div className="presets-header">
+              <Sparkles size={12} className="presets-icon" />
+              <h3>Scenario Presets</h3>
+            </div>
             <div className="preset-buttons">
-              {presets.map(p => (
+              {presets.map((p) => (
                 <button
                   key={p.scenario_id}
                   onClick={() => loadPreset(p)}
-                  className={`btn-preset${activePresetId === p.scenario_id ? ' active' : ''}`}
+                  className={`btn-preset ${activePresetId === p.scenario_id ? 'active' : ''}`}
                   disabled={isSimulating}
                 >
-                  {p.name}
+                  <div className="preset-btn-top">
+                    <span className="preset-name">{p.name}</span>
+                    {p.mean_cooling_c !== undefined && p.mean_cooling_c !== 0 && (
+                      <span className="preset-cooling font-mono">
+                        {p.mean_cooling_c.toFixed(1)}°C
+                      </span>
+                    )}
+                  </div>
+                  {p.description && <div className="preset-desc">{p.description}</div>}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Assumptions & Model Limitations Disclosure */}
+          <div className="assumptions-card">
+            <button
+              type="button"
+              className="assumptions-toggle"
+              onClick={() => setShowAssumptions(!showAssumptions)}
+              aria-expanded={showAssumptions}
+            >
+              <AlertTriangle size={13} className="assumptions-icon" />
+              <span>Assumptions & Model Limitations</span>
+              {showAssumptions ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+
+            {showAssumptions && (
+              <div className="assumptions-content animate-fade-in">
+                <ul>
+                  <li>
+                    <strong>Statistical Surrogate (Not CFD):</strong> Predictions are computed by an
+                    XGBoost regression model trained on satellite observations, not a physics-based
+                    fluid dynamic or thermal microclimate simulation.
+                  </li>
+                  <li>
+                    <strong>Land Surface Temperature (LST):</strong> Results represent radiometric
+                    surface skin temperature (e.g. roofs/asphalt), not 2-meter ambient air
+                    temperature. Air cooling is typically lower and moderated by atmospheric mixing.
+                  </li>
+                  <li>
+                    <strong>Instantaneous Implementation:</strong> Simulates mature canopy density
+                    and fully completed infrastructure without accounting for multi-year growth or
+                    construction phases.
+                  </li>
+                  <li>
+                    <strong>Zero Spatial Advection:</strong> Grid cells are evaluated independently;
+                    lateral thermal advection between neighboring cells is not modeled.
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right Panel: Synchronized Split Maps & Results */}
+        {/* Right Panel: Synchronized Split Maps & Results Summary */}
         <div className="results-panel">
           {/* Synchronized Field Atlas Map Controls (Top-Right of results panel) */}
           <MapControls
@@ -372,9 +751,10 @@ export default function ScenarioView({ city, cityInfo }) {
           />
 
           <div className="split-maps">
+            {/* Before Map */}
             <div className="map-half">
               <div className="map-label">
-                Before
+                <span>Before (Baseline)</span>
                 <button
                   className="info-trigger"
                   onClick={() => setShowLstInfo(true)}
@@ -389,11 +769,20 @@ export default function ScenarioView({ city, cityInfo }) {
                 onViewStateChange={handleViewStateChange}
                 controller={true}
                 layers={[beforeLayer]}
-                getTooltip={({ object }) => object && (
-                  `Cell: ${object.properties.grid_id}
-LST: ${object.properties.lst_mean?.toFixed(1)}°C
-Tier: ${object.properties.tier?.toUpperCase()}`
-                )}
+                getTooltip={({ object }) => {
+                  if (!object) return null;
+                  const tier = object.properties?.tier?.toUpperCase() || 'UNKNOWN';
+                  const isHotspot = tier === 'CRITICAL' || tier === 'HIGH';
+                  return `Cell: ${object.properties.grid_id}
+LST: ${object.properties.lst_mean?.toFixed(1)}°C (${tier})
+Target Status: ${
+                    isHotspot
+                      ? 'Hotspot (Targeted)'
+                      : targetScope === 'all'
+                      ? 'Targeted (City-wide)'
+                      : 'Baseline (Unmodified)'
+                  }`;
+                }}
               >
                 <Map
                   {...viewState}
@@ -402,19 +791,40 @@ Tier: ${object.properties.tier?.toUpperCase()}`
                 />
               </DeckGL>
             </div>
+
+            {/* After Map */}
             <div className="map-half">
-              <div className="map-label">After</div>
+              <div className="map-label">
+                <span>After (Scenario Simulation)</span>
+                {simulationResult && (
+                  <span className="map-sim-tag font-mono">
+                    {simulationResult.summary.cells_modified} cells
+                  </span>
+                )}
+              </div>
               <DeckGL
                 id="deckgl-after"
                 viewState={viewState}
                 onViewStateChange={handleViewStateChange}
                 controller={true}
                 layers={[afterLayer]}
-                getTooltip={({ object }) => object && (
-                  `Cell: ${object.properties.grid_id}
-LST: ${object.properties.lst_mean?.toFixed(1)}°C
-Tier: ${object.properties.tier?.toUpperCase()}`
-                )}
+                getTooltip={({ object }) => {
+                  if (!object) return null;
+                  const sim = cellResultsMap[object.properties.grid_id];
+                  const deltaT = sim?.delta_t ?? 0;
+                  const isTargeted = sim && Math.abs(deltaT) > 0.001;
+                  const tier = object.properties?.tier?.toUpperCase() || 'UNKNOWN';
+                  return `Cell: ${object.properties.grid_id}
+Simulated LST: ${object.properties.lst_mean?.toFixed(1)}°C (${tier})
+Cooling ΔT: ${deltaT < 0 ? deltaT.toFixed(2) + '°C' : '0.00°C'}
+Target Status: ${
+                    isTargeted
+                      ? 'Intervention Applied'
+                      : targetScope === 'hotspots'
+                      ? 'Untargeted (Non-Hotspot)'
+                      : 'No Modification'
+                  }`;
+                }}
               >
                 <Map
                   {...viewState}
@@ -428,28 +838,53 @@ Tier: ${object.properties.tier?.toUpperCase()}`
           {/* Map Attribution Bar */}
           <MapAttribution className="scenario-map-attribution" />
 
+          {/* Results Summary Overlay */}
           {simulationResult && simulationResult.summary && (
             <div className="results-summary glass-panel animate-fade-in">
               <div className="result-metric">
                 <span className="metric-label">Mean Cooling</span>
-                <span className="metric-value text-success">{simulationResult.summary.mean_cooling_c.toFixed(2)}°C</span>
+                <span className="metric-value text-success">
+                  {simulationResult.summary.mean_cooling_c.toFixed(2)}°C
+                </span>
+                <span className="metric-sub font-mono">
+                  Max: {simulationResult.summary.max_cooling_c.toFixed(2)}°C
+                </span>
               </div>
+
               <div className="result-metric">
                 <span className="metric-label">Hotspot Reduction</span>
-                <span className="metric-value text-success">{simulationResult.summary.hotspot_reduction_pct.toFixed(1)}%</span>
+                <span className="metric-value text-success">
+                  {simulationResult.summary.hotspot_reduction_pct.toFixed(1)}%
+                </span>
+                <span className="metric-sub font-mono">
+                  {simulationResult.summary.hotspots_after} remaining
+                </span>
               </div>
+
               <div className="result-metric">
-                <span className="metric-label">Remaining Hotspots</span>
-                <span className="metric-value">{simulationResult.summary.hotspots_after} cells</span>
+                <span className="metric-label">Targeted Cells</span>
+                <span className="metric-value">
+                  {simulationResult.summary.cells_modified}
+                </span>
+                <span className="metric-sub font-mono">
+                  ~{(simulationResult.summary.cells_modified * 0.25).toFixed(1)} km²
+                </span>
               </div>
+
               <div className="result-metric">
-                <span className="metric-label">Est. Cost</span>
-                <span className="metric-value text-warning">${simulationResult.summary.cost_estimate_m.toFixed(1)}M</span>
+                <span className="metric-label">Est. Capital Cost</span>
+                <span className="metric-value text-warning">
+                  ${simulationResult.summary.cost_estimate_m.toFixed(1)}M
+                </span>
+                <span className="metric-sub font-mono">
+                  {simulationResult.summary.cost_efficiency_c_per_m > 0
+                    ? `${(simulationResult.summary.cost_efficiency_c_per_m * 1000).toFixed(1)}m°C/$M`
+                    : '—'}
+                </span>
               </div>
             </div>
           )}
         </div>
-
       </div>
 
       {showLstInfo && <LstExplainerModal onClose={() => setShowLstInfo(false)} />}

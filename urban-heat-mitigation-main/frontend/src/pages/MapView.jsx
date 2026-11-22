@@ -108,6 +108,16 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
     return 20;
   }, [overview, gridData]);
 
+  // Controlled camera view state - 2D is the default visualization mode (pitch: 0)
+  const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
+  const [viewState, setViewState] = useState({
+    longitude: centerLon,
+    latitude: centerLat,
+    zoom: 10.5,
+    pitch: 0,
+    bearing: 0
+  });
+
   // 2D vs 3D mode is derived directly from camera pitch
   const is3D = (viewState?.pitch || 0) > 10;
 
@@ -144,16 +154,6 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
       }
     })
   ];
-
-  // Controlled camera view state - 2D is the default visualization mode (pitch: 0)
-  const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
-  const [viewState, setViewState] = useState({
-    longitude: centerLon,
-    latitude: centerLat,
-    zoom: 10.5,
-    pitch: 0,
-    bearing: 0
-  });
 
   // Smoothly pan & reset to new city center when selected city changes
   useEffect(() => {

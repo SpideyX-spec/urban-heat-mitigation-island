@@ -33,7 +33,7 @@ function GridMark() {
 }
 
 // Resolves aliases and fuzzy city names (e.g. "delhi" -> "new_delhi", "bangalore" -> "bengaluru")
-export function resolveCityId(input, cities = [], defaultCity = 'new_delhi') {
+function resolveCityId(input, cities = [], defaultCity = 'new_delhi') {
   if (!input) return defaultCity;
   const normalized = input.toLowerCase().trim().replace(/[\s-]+/g, '_');
 
