@@ -3,10 +3,13 @@ import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
 import { Info } from 'lucide-react';
+import { FlyToInterpolator } from '@deck.gl/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE } from '../api';
 import { useTheme } from '../ThemeContext';
 import LstExplainerModal from '../components/LstExplainerModal';
+import MapControls from '../components/MapControls';
+import MapAttribution from '../components/MapAttribution';
 import './ScenarioView.css';
 
 const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
@@ -190,13 +193,28 @@ export default function ScenarioView({ city, cityInfo }) {
   });
 
   const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
-  const initialViewState = {
+  const [viewState, setViewState] = useState({
     longitude: centerLon,
     latitude: centerLat,
     zoom: 10,
     pitch: 0,
     bearing: 0
-  };
+  });
+
+  // Keep camera centered when city changes
+  useEffect(() => {
+    if (cityInfo?.center) {
+      setViewState(prev => ({
+        ...prev,
+        longitude: cityInfo.center[0],
+        latitude: cityInfo.center[1],
+        zoom: 10,
+        bearing: 0,
+        transitionDuration: 1000,
+        transitionInterpolator: new FlyToInterpolator()
+      }));
+    }
+  }, [city, cityInfo]);
 
   const hasActiveIntervention = Object.values(intensities).some(v => v > 0);
 
@@ -262,8 +280,15 @@ export default function ScenarioView({ city, cityInfo }) {
           </div>
         </div>
 
-        {/* Right Panel: Maps & Results */}
+        {/* Right Panel: Synchronized Split Maps & Results */}
         <div className="results-panel">
+          {/* Synchronized Field Atlas Map Controls (Top-Right of results panel) */}
+          <MapControls
+            className="scenario-map-controls"
+            viewState={viewState}
+            onViewStateChange={setViewState}
+          />
+
           <div className="split-maps">
             <div className="map-half">
               <div className="map-label">
@@ -276,17 +301,30 @@ export default function ScenarioView({ city, cityInfo }) {
                   <Info size={12} />
                 </button>
               </div>
-              <DeckGL key={`before-${city}`} initialViewState={initialViewState} controller={true} layers={[beforeLayer]}>
-                <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} />
+              <DeckGL
+                viewState={viewState}
+                onViewStateChange={({ viewState: nv }) => setViewState(nv)}
+                controller={true}
+                layers={[beforeLayer]}
+              >
+                <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
               </DeckGL>
             </div>
             <div className="map-half">
               <div className="map-label">After</div>
-              <DeckGL key={`after-${city}`} initialViewState={initialViewState} controller={true} layers={[afterLayer]}>
-                <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} />
+              <DeckGL
+                viewState={viewState}
+                onViewStateChange={({ viewState: nv }) => setViewState(nv)}
+                controller={true}
+                layers={[afterLayer]}
+              >
+                <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
               </DeckGL>
             </div>
           </div>
+
+          {/* Map Attribution Bar */}
+          <MapAttribution className="scenario-map-attribution" />
 
           {simulationResult && simulationResult.summary && (
             <div className="results-summary glass-panel animate-fade-in">

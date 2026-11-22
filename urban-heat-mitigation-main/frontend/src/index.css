@@ -174,7 +174,41 @@ button {
   animation: fadeIn 0.4s ease-out forwards;
 }
 
-/* Maplibre Overrides */
+/* Maplibre Overrides & Legal Attribution Compliance */
+.maplibregl-control-container {
+  pointer-events: auto !important;
+  z-index: 10 !important;
+}
+
 .maplibregl-control-container .maplibregl-ctrl-bottom-right {
-  display: none; /* Hide default controls to custom place them */
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 10 !important;
+}
+
+.maplibregl-ctrl-attrib {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: var(--panel-bg-solid) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  font-family: var(--font-sans) !important;
+  backdrop-filter: blur(8px) !important;
+  margin: 0 !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--text-secondary) !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+}
+
+.maplibregl-ctrl-attrib a:hover {
+  color: var(--text-primary) !important;
 }

@@ -53,6 +53,113 @@
   z-index: 10;
 }
 
+/* Subtle but visible Modelled Data provenance bar */
+.modelled-data-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--overlay-3);
+}
+
+.modelled-data-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sunken-bg);
+  border: 1px solid var(--overlay-4);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  cursor: default;
+}
+
+.modelled-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  display: inline-block;
+  opacity: 0.9;
+}
+
+.modelled-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.methodology-link-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.methodology-link-btn:hover {
+  color: var(--text-primary);
+  background: var(--overlay-2);
+}
+
+/* Map navigation controls positioning (Top-Left) */
+.map-view-controls {
+  top: 24px;
+  left: 24px;
+}
+
+/* Map footer: Bottom Left instrumentation cluster */
+.map-footer-left {
+  position: absolute;
+  bottom: 12px;
+  left: 24px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+/* Map watermark provenance badge */
+.map-watermark-provenance {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-bg-solid);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  pointer-events: auto;
+  box-shadow: var(--shadow-sm);
+}
+
+.map-view-attribution {
+  position: static;
+}
+
+.watermark-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.7;
+}
+
 .kpi-header {
   display: flex;
   justify-content: space-between;

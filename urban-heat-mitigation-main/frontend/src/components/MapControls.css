@@ -1,0 +1,87 @@
+/* MapControls.css - Field Atlas Design System */
+
+.map-controls-group {
+  position: absolute;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg-solid);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  user-select: none;
+}
+
+.map-ctrl-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--overlay-4);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  position: relative;
+}
+
+.map-ctrl-btn:last-child {
+  border-bottom: none;
+}
+
+.map-ctrl-btn:hover:not(:disabled) {
+  background: var(--overlay-4);
+  color: var(--text-primary);
+}
+
+.map-ctrl-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  z-index: 2;
+}
+
+.map-ctrl-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.map-ctrl-btn:active:not(:disabled) {
+  background: var(--overlay-6);
+  transform: translateY(0.5px);
+}
+
+.map-ctrl-divider {
+  height: 1px;
+  background: var(--overlay-4);
+  margin: 0;
+}
+
+/* Compass indicator */
+.compass-btn.is-rotated {
+  color: var(--accent-primary);
+}
+
+/* 2D / 3D Toggle Badge */
+.dimension-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.perspective-btn.is-3d {
+  color: var(--accent-primary);
+}
+
+.perspective-btn.is-3d .dimension-badge {
+  background: var(--overlay-3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--overlay-5);
+}

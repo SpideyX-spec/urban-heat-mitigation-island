@@ -9,6 +9,10 @@ import { useTheme } from '../ThemeContext';
 import LstExplainerModal from '../components/LstExplainerModal';
 import ServerWakingNotice from '../components/ServerWakingNotice';
 import ValidationBadge from '../components/ValidationBadge';
+import MethodologyDrawer from '../components/MethodologyDrawer';
+import MapControls from '../components/MapControls';
+import MapAttribution from '../components/MapAttribution';
+import { FlyToInterpolator } from '@deck.gl/core';
 import './MapView.css';
 
 // Map basemap styles — switches with the app theme so the map matches
@@ -32,6 +36,7 @@ export default function MapView({ city, cityInfo }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showLstInfo, setShowLstInfo] = useState(false);
+  const [showMethodology, setShowMethodology] = useState(false);
   const [validation, setValidation] = useState(null);
 
   useEffect(() => {
@@ -113,15 +118,31 @@ export default function MapView({ city, cityInfo }) {
     })
   ];
 
-  // Recenter the camera on this city. cityInfo.center is [lon, lat].
+  // Controlled camera view state
   const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
-  const initialViewState = {
+  const [viewState, setViewState] = useState({
     longitude: centerLon,
     latitude: centerLat,
     zoom: 10.5,
     pitch: 45,
     bearing: 0
-  };
+  });
+
+  // Smoothly pan & reset to new city center when selected city changes
+  useEffect(() => {
+    if (cityInfo?.center) {
+      setViewState(prev => ({
+        ...prev,
+        longitude: cityInfo.center[0],
+        latitude: cityInfo.center[1],
+        zoom: 10.5,
+        bearing: 0,
+        pitch: prev.pitch > 10 ? 45 : 0,
+        transitionDuration: 1000,
+        transitionInterpolator: new FlyToInterpolator()
+      }));
+    }
+  }, [city, cityInfo]);
 
   return (
     <div className="map-view-container animate-fade-in">
@@ -138,12 +159,9 @@ export default function MapView({ city, cityInfo }) {
           </div>
         )}
 
-        {/* key={city} forces a clean remount (and camera reset) whenever
-            the selected city changes, since DeckGL's initialViewState
-            only applies once on mount otherwise. */}
         <DeckGL
-          key={city}
-          initialViewState={initialViewState}
+          viewState={viewState}
+          onViewStateChange={({ viewState: newViewState }) => setViewState(newViewState)}
           controller={true}
           layers={layers}
           getTooltip={({object}) => object && (
@@ -153,13 +171,45 @@ Tier: ${object.properties.tier.toUpperCase()}
 Vegetation: ${(object.properties.frac_vegetation * 100).toFixed(1)}%`
           )}
         >
-          <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} />
+          <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
         </DeckGL>
+
+        {/* Compact Field Atlas Map Navigation Controls (Top-Left) */}
+        <MapControls
+          className="map-view-controls"
+          viewState={viewState}
+          onViewStateChange={setViewState}
+        />
+
+        {/* Bottom Left: Map Provenance Watermark and Required Map Attributions */}
+        <div className="map-footer-left">
+          <div className="map-watermark-provenance">
+            <span className="watermark-dot"></span>
+            <span>SYNTHETIC UHI SIMULATION · 500M ANALYSIS GRID</span>
+          </div>
+          <MapAttribution className="map-view-attribution" />
+        </div>
       </div>
 
       {/* KPI Overlay */}
       {overview && (
         <div className="kpi-overlay glass-panel">
+          {/* Subtle but visible MODELLED DATA indicator */}
+          <div className="modelled-data-bar">
+            <div className="modelled-data-chip" title="Simulated microclimate data, uncalibrated against live observations">
+              <span className="modelled-dot"></span>
+              <span className="modelled-text">MODELLED DATA</span>
+            </div>
+            <button
+              type="button"
+              className="methodology-link-btn"
+              onClick={() => setShowMethodology(true)}
+              title="Inspect data provenance, XGBoost model, and Landsat comparison"
+            >
+              Methodology &amp; Limits ↗
+            </button>
+          </div>
+
           <div className="kpi-header">
             <h3>
               {overview.city}
@@ -204,11 +254,21 @@ Vegetation: ${(object.properties.frac_vegetation * 100).toFixed(1)}%`
             </div>
           </div>
 
-          <ValidationBadge validation={validation} />
+          <ValidationBadge
+            validation={validation}
+            onOpenMethodology={() => setShowMethodology(true)}
+          />
         </div>
       )}
 
       {showLstInfo && <LstExplainerModal onClose={() => setShowLstInfo(false)} />}
+      <MethodologyDrawer
+        isOpen={showMethodology}
+        onClose={() => setShowMethodology(false)}
+        city={city}
+        cityInfo={cityInfo}
+        validation={validation}
+      />
     </div>
   );
 }

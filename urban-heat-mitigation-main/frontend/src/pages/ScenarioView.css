@@ -215,6 +215,20 @@
   align-items: center;
 }
 
+/* Map navigation controls positioning (Top-Right of results panel) */
+.scenario-map-controls {
+  top: 24px;
+  right: 24px;
+  z-index: 15;
+}
+
+/* Attribution positioning in scenario view */
+.scenario-map-attribution {
+  bottom: 8px;
+  right: 16px;
+  z-index: 15;
+}
+
 .results-summary {
   position: absolute;
   bottom: 32px;

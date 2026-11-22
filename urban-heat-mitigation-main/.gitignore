@@ -8,6 +8,11 @@ env/
 .ipynb_checkpoints/
 .pytest_cache/
 
+# Node / Frontend
+node_modules/
+dist/
+.npm/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,75 +1,148 @@
 .validation-badge {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .validation-badge-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  background: rgba(0, 200, 83, 0.1);
-  border: 1px solid rgba(0, 200, 83, 0.25);
+  background: var(--sunken-bg);
+  border: 1px solid var(--overlay-4);
   border-radius: var(--radius-md);
   padding: 8px 10px;
-  color: var(--tier-normal);
+  color: var(--text-secondary);
   font-size: 11px;
-  font-weight: 600;
   cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-sans);
 }
 
-.validation-badge.weak-match .validation-badge-trigger {
-  background: rgba(255, 145, 0, 0.1);
-  border-color: rgba(255, 145, 0, 0.25);
-  color: var(--tier-high);
+.validation-badge-trigger:hover {
+  background: var(--overlay-3);
+  border-color: var(--overlay-6);
+  color: var(--text-primary);
 }
 
-.validation-badge-trigger span:first-of-type {
+.satellite-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.badge-title {
   flex: 1;
   text-align: left;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
-.validation-rmse {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+/* Subtle scientific status chip - neutral slate / restrained */
+.discrepancy-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--overlay-3);
+  border: 1px solid var(--overlay-4);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.uncalibrated-tag {
+  color: var(--text-muted);
 }
 
 .validation-detail {
   margin-top: 8px;
-  background: var(--overlay-2);
-  border: 1px solid var(--glass-border);
+  background: var(--sunken-bg);
+  border: 1px solid var(--overlay-4);
   border-radius: var(--radius-md);
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   animation: validation-expand 0.2s ease;
 }
 
 @keyframes validation-expand {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.validation-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--overlay-3);
+  padding-bottom: 6px;
+}
+
+.validation-rows-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .validation-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  padding: 4px 0;
+  font-size: 11.5px;
+  padding: 3px 0;
   color: var(--text-secondary);
 }
 
 .validation-row strong {
   color: var(--text-primary);
+  font-weight: 500;
+}
+
+.validation-row.highlight {
+  background: var(--overlay-2);
+  padding: 3px 6px;
+  border-radius: 3px;
+}
+
+.validation-row .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 600;
 }
 
 .validation-divider {
   height: 1px;
-  background: var(--overlay-5);
-  margin: 6px 0;
+  background: var(--overlay-3);
+  margin: 4px 0;
 }
 
 .validation-note {
-  margin-top: 10px;
+  margin: 0;
   font-size: 11px;
   line-height: 1.5;
   color: var(--text-muted);
+  border-top: 1px solid var(--overlay-3);
+  padding-top: 8px;
+}
+
+.validation-methodology-btn {
+  background: transparent;
+  border: 1px solid var(--overlay-4);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.validation-methodology-btn:hover {
+  background: var(--overlay-3);
+  color: var(--text-primary);
+  border-color: var(--overlay-6);
 }
