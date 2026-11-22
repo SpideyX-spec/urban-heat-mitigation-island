@@ -201,6 +201,39 @@ export default function ScenarioView({ city, cityInfo }) {
     bearing: 0
   });
 
+  // Synchronized camera state change handler for both Before and After maps
+  const handleViewStateChange = useCallback(({ viewState: nv }) => {
+    setViewState(prev => {
+      // Epsilon comparison on spatial values to prevent unnecessary updates or feedback loops
+      if (
+        Math.abs(prev.longitude - nv.longitude) < 0.0000001 &&
+        Math.abs(prev.latitude - nv.latitude) < 0.0000001 &&
+        Math.abs(prev.zoom - nv.zoom) < 0.00001 &&
+        Math.abs(prev.pitch - nv.pitch) < 0.001 &&
+        Math.abs(prev.bearing - nv.bearing) < 0.001
+      ) {
+        return prev;
+      }
+
+      // Omit instance-specific canvas dimensions (width/height) so maps do not distort each other
+      return {
+        ...prev,
+        longitude: nv.longitude,
+        latitude: nv.latitude,
+        zoom: nv.zoom,
+        pitch: nv.pitch,
+        bearing: nv.bearing,
+        maxZoom: nv.maxZoom ?? prev.maxZoom,
+        minZoom: nv.minZoom ?? prev.minZoom,
+        maxPitch: nv.maxPitch ?? prev.maxPitch,
+        minPitch: nv.minPitch ?? prev.minPitch,
+        // Zero out transitions during direct user manipulation for 1:1 responsive tracking
+        transitionDuration: 0,
+        transitionInterpolator: undefined
+      };
+    });
+  }, []);
+
   // Keep camera centered when city changes
   useEffect(() => {
     if (cityInfo?.center) {
@@ -302,23 +335,43 @@ export default function ScenarioView({ city, cityInfo }) {
                 </button>
               </div>
               <DeckGL
+                id="deckgl-before"
                 viewState={viewState}
-                onViewStateChange={({ viewState: nv }) => setViewState(nv)}
+                onViewStateChange={handleViewStateChange}
                 controller={true}
                 layers={[beforeLayer]}
+                getTooltip={({ object }) => object && (
+                  `Cell: ${object.properties.grid_id}
+LST: ${object.properties.lst_mean?.toFixed(1)}°C
+Tier: ${object.properties.tier?.toUpperCase()}`
+                )}
               >
-                <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
+                <Map
+                  {...viewState}
+                  mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
+                  attributionControl={false}
+                />
               </DeckGL>
             </div>
             <div className="map-half">
               <div className="map-label">After</div>
               <DeckGL
+                id="deckgl-after"
                 viewState={viewState}
-                onViewStateChange={({ viewState: nv }) => setViewState(nv)}
+                onViewStateChange={handleViewStateChange}
                 controller={true}
                 layers={[afterLayer]}
+                getTooltip={({ object }) => object && (
+                  `Cell: ${object.properties.grid_id}
+LST: ${object.properties.lst_mean?.toFixed(1)}°C
+Tier: ${object.properties.tier?.toUpperCase()}`
+                )}
               >
-                <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
+                <Map
+                  {...viewState}
+                  mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
+                  attributionControl={false}
+                />
               </DeckGL>
             </div>
           </div>
