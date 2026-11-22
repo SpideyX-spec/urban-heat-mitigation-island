@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "urban-heat-mitigation-main": {
+      "root": "urban-heat-mitigation-main",
+      "framework": "fastapi"
+    },
+    "frontend": {
+      "root": "urban-heat-mitigation-main/frontend",
+      "framework": "vite"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
+}
