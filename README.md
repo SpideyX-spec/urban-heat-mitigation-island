@@ -1,5 +1,4 @@
-<p align="center">
-  <img src="docs/banner.svg" alt="Urban Heat Mitigation" width="100%">
+
 </p>
 <img width="1600" height="500" alt="image" src="https://github.com/user-attachments/assets/88f780c9-2a1a-46ea-8d99-8cbd24060d7f" />
 
