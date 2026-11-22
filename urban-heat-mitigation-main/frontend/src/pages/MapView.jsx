@@ -29,7 +29,7 @@ const TIER_COLORS = {
   cool: [44, 123, 182]        // #2C7BB6 - cool microclimate sink
 };
 
-export default function MapView({ city, cityInfo }) {
+export default function MapView({ city, cityInfo, onOpenMethodology }) {
   const { theme } = useTheme();
   const [gridData, setGridData] = useState(null);
   const [overview, setOverview] = useState(null);
@@ -237,7 +237,7 @@ Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
             <button
               type="button"
               className="methodology-link-btn"
-              onClick={() => setShowMethodology(true)}
+              onClick={onOpenMethodology || (() => setShowMethodology(true))}
               title="Inspect data provenance, XGBoost model, and Landsat comparison"
             >
               Methodology &amp; Limits ↗
@@ -390,7 +390,7 @@ Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
 
           <ValidationBadge
             validation={validation}
-            onOpenMethodology={() => setShowMethodology(true)}
+            onOpenMethodology={onOpenMethodology || (() => setShowMethodology(true))}
           />
         </div>
       )}
