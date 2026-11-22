@@ -29,9 +29,8 @@ A shared **XGBoost model** analyzes grid-level heat drivers, **SHAP** explains m
 
 ## Architecture
 
-<p align="center">
-  <img src="docs/architecture.svg" alt="Urban Heat Mitigation architecture" width="100%">
-</p>
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/d1c541b7-7bc4-4ebe-af7b-6d3c6baa5b90" />
+
 
 ### End-to-end flow
 
