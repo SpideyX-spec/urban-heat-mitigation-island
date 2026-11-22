@@ -1,10 +1,3 @@
-const USD_M_TO_INR_CR = 8.4; // $1M ≈ ₹8.4 Crore
-
-function formatInrCrores(usdMillions) {
-  if (usdMillions == null) return '—';
-  const crores = usdMillions * USD_M_TO_INR_CR;
-  return `₹${crores.toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr`;
-}
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
@@ -37,6 +30,14 @@ import LstExplainerModal from '../components/LstExplainerModal';
 import MapControls from '../components/MapControls';
 import MapAttribution from '../components/MapAttribution';
 import './ScenarioView.css';
+
+const USD_M_TO_INR_CR = 8.4; // $1M ≈ ₹8.4 Crore
+
+function formatInrCrores(usdMillions) {
+  if (usdMillions == null) return '—';
+  const crores = usdMillions * USD_M_TO_INR_CR;
+  return `₹${crores.toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr`;
+}
 
 const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
@@ -330,7 +331,7 @@ export default function ScenarioView({ city, cityInfo }) {
         setIsSimulating(false);
       }
     },
-    [city, targetScope]
+    [city, targetScope, isMobile]
   );
 
   const runSimulation = () => {
@@ -926,11 +927,6 @@ export default function ScenarioView({ city, cityInfo }) {
                   layers={beforeLayers}
                   getTooltip={getBeforeTooltip}
                 >
-                  <Map
-                    {...viewState}
-                    mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
-                    attributionControl={false}
-                  />
                 </DeckGL>
               </div>
 
@@ -952,11 +948,6 @@ export default function ScenarioView({ city, cityInfo }) {
                   layers={afterLayers}
                   getTooltip={getAfterTooltip}
                 >
-                  <Map
-                    {...viewState}
-                    mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
-                    attributionControl={false}
-                  />
                 </DeckGL>
               </div>
             </div>
@@ -1000,11 +991,11 @@ export default function ScenarioView({ city, cityInfo }) {
                 <div className="result-metric">
                   <span className="metric-label">Est. Capital Cost</span>
                   <span className="metric-value text-warning">
-                    ${simulationResult.summary.cost_estimate_m.toFixed(1)}M
+                    {formatInrCrores(simulationResult.summary.cost_estimate_m)}
                   </span>
                   <span className="metric-sub font-mono">
                     {simulationResult.summary.cost_efficiency_c_per_m > 0
-                      ? `${(simulationResult.summary.cost_efficiency_c_per_m * 1000).toFixed(1)}m°C/$M`
+                      ? `${((simulationResult.summary.cost_efficiency_c_per_m * 1000) / USD_M_TO_INR_CR).toFixed(2)}m°C/₹Cr`
                       : '—'}
                   </span>
                 </div>
@@ -1060,11 +1051,6 @@ export default function ScenarioView({ city, cityInfo }) {
                 layers={mobileCompareMode === 'after' ? afterLayers : beforeLayers}
                 getTooltip={mobileCompareMode === 'after' ? getAfterTooltip : getBeforeTooltip}
               >
-                <Map
-                  {...viewState}
-                  mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
-                  attributionControl={false}
-                />
               </DeckGL>
             </div>
 
@@ -1088,7 +1074,7 @@ export default function ScenarioView({ city, cityInfo }) {
                 <div className="result-metric">
                   <span className="metric-label">Cost</span>
                   <span className="metric-value text-warning font-mono">
-                    ${simulationResult.summary.cost_estimate_m.toFixed(1)}M
+                    {formatInrCrores(simulationResult.summary.cost_estimate_m)}
                   </span>
                 </div>
               </div>
