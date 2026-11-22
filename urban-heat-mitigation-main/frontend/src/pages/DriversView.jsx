@@ -15,18 +15,11 @@ import {
 import {
   ArrowUpRight,
   ArrowDownRight,
-  HelpCircle,
-  Database,
-  Layers,
-  Filter,
   BarChart3,
   TrendingUp,
-  Sliders,
-  CheckCircle2,
   Info
 } from 'lucide-react';
 import {
-  API_BASE,
   fetchCityDrivers,
   fetchCityHotspotDrivers,
   fetchCityDependence
@@ -664,8 +657,9 @@ export default function DriversView({ city, cityInfo }) {
               </div>
               <p>
                 SHAP values satisfy efficiency, symmetry, and additivity from cooperative game theory.
-                For any cell $x$, $\sum \phi_i = \hat{y}(x) - E[\hat{y}]$. A value of $+2.5^\circ\text{C}$
-                means this feature pushed predicted surface temperature $2.5^\circ\text{C}$ higher than
+                For any cell x, the sum of all local feature attributions equals the model prediction
+                deviation from the baseline: &sum; &phi;&#7522; = &#375;(x) &minus; E[&#375;]. A value of +2.5&deg;C
+                means this factor pushed predicted surface temperature 2.5&deg;C higher than
                 the citywide baseline average.
               </p>
             </div>

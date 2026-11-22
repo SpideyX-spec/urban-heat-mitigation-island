@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { Plus, Minus, Compass, Box } from 'lucide-react';
+import { Plus, Minus, Compass } from 'lucide-react';
 import { FlyToInterpolator } from '@deck.gl/core';
 import './MapControls.css';
 

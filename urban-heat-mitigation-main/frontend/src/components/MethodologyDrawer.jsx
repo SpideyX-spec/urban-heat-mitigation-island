@@ -1,4 +1,4 @@
-import { X, Database, Cpu, Satellite, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Database, Cpu, Satellite, AlertTriangle } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import './MethodologyDrawer.css';
 

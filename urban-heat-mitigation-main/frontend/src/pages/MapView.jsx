@@ -10,9 +10,7 @@ import {
   ArrowDownRight,
   RefreshCw,
   Sparkles,
-  Layers,
-  ChevronUp,
-  ChevronDown
+  ChevronUp
 } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE, fetchCityGrid, fetchCityOverview, fetchCityValidation } from '../api';

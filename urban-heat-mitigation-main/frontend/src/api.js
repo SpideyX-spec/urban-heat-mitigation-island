@@ -119,7 +119,7 @@ export async function fetchCityHotspotDrivers(city, signal) {
       signal,
       maxAge: 15 * 60 * 1000
     });
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -133,7 +133,7 @@ export async function fetchCityDependence(city, signal) {
       signal,
       maxAge: 15 * 60 * 1000
     });
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -148,7 +148,7 @@ export async function fetchCityValidation(city, signal) {
     const res = await fetch(`${API_BASE}/api/v1/validation?city=${city}`, { signal });
     if (!res.ok) return null;
     return await res.json();
-  } catch (err) {
+  } catch {
     // Non-blocking best-effort call
     return null;
   }

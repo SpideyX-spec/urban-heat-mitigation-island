@@ -18,7 +18,6 @@ import {
   ChevronUp,
   AlertTriangle,
   Sliders,
-  Layers,
   Sparkles,
   X
 } from 'lucide-react';
@@ -931,7 +930,7 @@ export default function ScenarioView({ city, cityInfo }) {
                   <span>After (Scenario Simulation)</span>
                   {simulationResult && (
                     <span className="map-sim-tag font-mono">
-                      {simulationResult.summary.cells_modified} cells
+                      {simulationResult.summary.cells_modified} cells{simDurationMs ? ` · ${simDurationMs}ms` : ''}
                     </span>
                   )}
                 </div>
