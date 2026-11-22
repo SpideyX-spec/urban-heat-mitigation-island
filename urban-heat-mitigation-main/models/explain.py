@@ -13,6 +13,8 @@ across all cities and isn't filtered by city.
 """
 
 import json
+import math
+import numpy as np
 import pandas as pd
 
 from pipeline.config import MODEL_DIR, SHAP_FILE, city_features_file
@@ -116,3 +118,61 @@ def get_top_drivers_for_hotspots(city_id: str):
         {"feature": k, **v}
         for k, v in sorted_importance[:10]
     ]
+
+
+def get_dependence_data(city_id: str, feature_names: list[str] = None, sample_size: int = 150) -> dict:
+    """
+    Generate SHAP dependence data (feature value vs. marginal SHAP impact)
+    for specified features in a given city.
+    """
+    shap_df = _load_shap_df()
+    city_shap = shap_df[shap_df["city_id"] == city_id]
+    if city_shap.empty:
+        return {"city_id": city_id, "features": {}}
+
+    feat_path = city_features_file(city_id)
+    if not feat_path.exists():
+        return {"city_id": city_id, "features": {}}
+
+    features_df = pd.read_parquet(feat_path)
+
+    if not feature_names:
+        global_imp = get_global_importance()
+        feature_names = (
+            [f["feature"] for f in global_imp[:3]]
+            if global_imp
+            else ["air_temp_max", "veg_imperv_ratio", "cooling_potential"]
+        )
+
+    valid_feats = [f for f in feature_names if f in features_df.columns and f in city_shap.columns]
+    if not valid_feats:
+        return {"city_id": city_id, "features": {}}
+
+    # Merge on grid_id to pair exact cell values with exact SHAP values
+    shap_cols = ["grid_id"] + valid_feats
+    feat_cols = ["grid_id"] + valid_feats
+    merged = pd.merge(
+        city_shap[shap_cols],
+        features_df[feat_cols],
+        on="grid_id",
+        suffixes=("_shap", "_val")
+    )
+
+    if len(merged) > sample_size:
+        merged = merged.sample(n=sample_size, random_state=42)
+
+    dependence = {}
+    for feat in valid_feats:
+        shap_col = f"{feat}_shap" if f"{feat}_shap" in merged.columns else feat
+        val_col = f"{feat}_val" if f"{feat}_val" in merged.columns else feat
+        x_vals = merged[val_col].values
+        y_vals = merged[shap_col].values
+        points = []
+        for x, y in zip(x_vals, y_vals):
+            if pd.notna(x) and pd.notna(y) and not math.isnan(x) and not math.isnan(y):
+                points.append({"x": round(float(x), 3), "shap": round(float(y), 3)})
+        points.sort(key=lambda p: p["x"])
+        dependence[feat] = points
+
+    return {"city_id": city_id, "features": dependence}
+

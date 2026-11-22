@@ -54,3 +54,20 @@ async def get_hotspot_drivers(city_id: str = Depends(get_city_id)):
         return {"hotspot_drivers": get_top_drivers_for_hotspots(city_id)}
     except Exception as e:
         return {"error": str(e), "hotspot_drivers": []}
+
+
+@router.get("/dependence")
+async def get_dependence(
+    city_id: str = Depends(get_city_id),
+    features: Optional[str] = Query(None, description="Comma-separated feature list (default: top 3)"),
+):
+    """
+    Returns (raw_feature_value, shap_value) pairs for SHAP dependence plots
+    derived from the actual trained model outputs and city features.
+    """
+    try:
+        from models.explain import get_dependence_data
+        feat_list = [f.strip() for f in features.split(",")] if features else None
+        return get_dependence_data(city_id, feat_list)
+    except Exception as e:
+        return {"error": str(e), "city_id": city_id, "features": {}}
