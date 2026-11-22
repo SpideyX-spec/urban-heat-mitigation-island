@@ -287,33 +287,92 @@
   background: transparent;
   margin: 2px 0;
   padding: 0;
-}
-
-.range-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  height: 14px;
-  width: 14px;
-  border-radius: var(--radius-sm);
-  background: var(--text-1);
+  outline: none;
   cursor: pointer;
-  margin-top: -5px;
-  border: 1px solid var(--line-strong);
-  box-shadow: none;
-  transition: background-color 0.15s ease, transform 0.1s ease;
 }
 
-.range-slider::-webkit-slider-thumb:hover {
-  background: #ffffff;
-  transform: scale(1.1);
-}
-
+/* WebKit Track: Dynamic Green (#22C55E) to Dark (#30363D) Progress Fill */
 .range-slider::-webkit-slider-runnable-track {
   width: 100%;
   height: 4px;
   cursor: pointer;
-  background: var(--surface-3);
-  border: 1px solid var(--line);
-  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    #22C55E 0%,
+    #22C55E var(--slider-pct, 0%),
+    #30363D var(--slider-pct, 0%),
+    #30363D 100%
+  );
+  border-radius: 2px;
+  border: none;
+  transition: background 0.05s ease;
+}
+
+/* WebKit Thumb: White (#FFFFFF) circular thumb (14px diameter) with subtle border & shadow */
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  cursor: pointer;
+  margin-top: -5px; /* (4px track - 14px thumb) / 2 = -5px */
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+/* Subtle Green Hover & Focus Effects */
+.range-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.22), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.range-slider:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+/* Firefox Track */
+.range-slider::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: #30363D;
+  border-radius: 2px;
+  border: none;
+}
+
+/* Firefox Native Filled Progress Bar */
+.range-slider::-moz-range-progress {
+  height: 4px;
+  background: #22C55E;
+  border-radius: 2px 0 0 2px;
+}
+
+/* Firefox Thumb */
+.range-slider::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.range-slider:hover::-moz-range-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.22), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.range-slider:focus-visible::-moz-range-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
+  outline: none;
 }
 
 .slider-footer {
@@ -977,13 +1036,18 @@
     height: 22px;
     width: 22px;
     border-radius: 50%;
-    margin-top: -8px;
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    margin-top: -9px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   }
   .range-slider::-moz-range-thumb {
     height: 22px;
     width: 22px;
     border-radius: 50%;
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   }
   .btn-simulate,
   .btn-reset,

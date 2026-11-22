@@ -673,6 +673,9 @@ export default function ScenarioView({ city, cityInfo }) {
                   value={value}
                   onChange={(e) => handleSliderChange(inv.id, e.target.value)}
                   className="range-slider"
+                  style={{
+                    '--slider-pct': `${pct}%`
+                  }}
                   aria-label={`${inv.label} intervention intensity`}
                   aria-valuemin="0"
                   aria-valuemax="100"
