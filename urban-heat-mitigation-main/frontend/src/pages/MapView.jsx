@@ -1,8 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import Map from 'react-map-gl/maplibre';
-import { Info } from 'lucide-react';
+import {
+  Info,
+  X,
+  MapPin,
+  ArrowUpRight,
+  ArrowDownRight,
+  RefreshCw,
+  Sparkles,
+  Layers
+} from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { API_BASE } from '../api';
 import { useTheme } from '../ThemeContext';
@@ -15,8 +24,7 @@ import MapAttribution from '../components/MapAttribution';
 import { FlyToInterpolator } from '@deck.gl/core';
 import './MapView.css';
 
-// Map basemap styles — switches with the app theme so the map matches
-// the surrounding UI instead of always staying dark.
+// Map basemap styles
 const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
@@ -29,6 +37,45 @@ const TIER_COLORS = {
   cool: [44, 123, 182]        // #2C7BB6 - cool microclimate sink
 };
 
+// Feature metadata for friendly names and units in SHAP inspector
+const FEATURE_META = {
+  air_temp_max: { name: 'Peak Air Temperature', format: (v) => `${v.toFixed(1)}°C` },
+  veg_imperv_ratio: { name: 'Veg / Impervious Ratio', format: (v) => v.toFixed(2) },
+  cooling_potential: { name: 'Cooling Capacity Index', format: (v) => v.toFixed(1) },
+  ndvi_mean: { name: 'Vegetation Index (NDVI)', format: (v) => v.toFixed(3) },
+  frac_impervious: { name: 'Impervious Surface', format: (v) => `${(v * 100).toFixed(1)}%` },
+  wind_speed_mean: { name: 'Mean Wind Speed', format: (v) => `${v.toFixed(2)} m/s` },
+  road_density: { name: 'Road Surface Density', format: (v) => `${v.toFixed(0)} m/km²` },
+  water_area_frac: { name: 'Water Surface Area', format: (v) => `${(v * 100).toFixed(1)}%` },
+  sky_view_factor: { name: 'Sky View Factor', format: (v) => v.toFixed(3) },
+  thermal_mass_proxy: { name: 'Thermal Mass Index', format: (v) => v.toFixed(1) },
+  solar_radiation: { name: 'Net Solar Radiation', format: (v) => `${v.toFixed(1)} W/m²` },
+  building_density: { name: 'Building Footprint', format: (v) => `${v.toFixed(1)}` },
+  frac_bare_soil: { name: 'Bare Soil Fraction', format: (v) => `${(v * 100).toFixed(1)}%` },
+  frac_water: { name: 'Water Fraction', format: (v) => `${(v * 100).toFixed(1)}%` },
+  ndbi_mean: { name: 'Built-up Index (NDBI)', format: (v) => v.toFixed(3) },
+  park_area_frac: { name: 'Park / Green Space', format: (v) => `${(v * 100).toFixed(1)}%` },
+  frac_vegetation: { name: 'Total Vegetation', format: (v) => `${(v * 100).toFixed(1)}%` },
+  dist_to_water: { name: 'Distance to Water', format: (v) => `${Math.round(v)}m` },
+  building_height_mean: { name: 'Building Height', format: (v) => `${v.toFixed(1)}m` },
+  green_deficit: { name: 'Vegetation Deficit', format: (v) => v.toFixed(3) },
+  tree_canopy_frac: { name: 'Tree Canopy Density', format: (v) => `${(v * 100).toFixed(1)}%` },
+  ndvi_std: { name: 'Vegetation Variance', format: (v) => v.toFixed(3) }
+};
+
+function formatFeatureName(key) {
+  if (FEATURE_META[key]) return FEATURE_META[key].name;
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatFeatureValue(key, val) {
+  if (typeof val !== 'number') return '—';
+  if (FEATURE_META[key]?.format) return FEATURE_META[key].format(val);
+  return val.toFixed(2);
+}
+
 export default function MapView({ city, cityInfo, onOpenMethodology }) {
   const { theme } = useTheme();
   const [gridData, setGridData] = useState(null);
@@ -39,17 +86,29 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
   const [showMethodology, setShowMethodology] = useState(false);
   const [validation, setValidation] = useState(null);
 
+  // Interactive cell selection & local SHAP inspection state
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [shapData, setShapData] = useState(null);
+  const [shapLoading, setShapLoading] = useState(false);
+  const [shapError, setShapError] = useState(null);
+  const shapCacheRef = useRef({});
+
   useEffect(() => {
     if (!city) return;
 
     let cancelled = false;
+
+    // Reset cell selection on city change
+    setSelectedCell(null);
+    setShapData(null);
+    setShapError(null);
 
     const fetchData = async () => {
       try {
         const [gridRes, overviewRes, validationRes] = await Promise.all([
           fetch(`${API_BASE}/api/v1/grid?city=${city}`),
           fetch(`${API_BASE}/api/v1/overview?city=${city}`),
-          fetch(`${API_BASE}/api/v1/validation?city=${city}`).catch(() => null),
+          fetch(`${API_BASE}/api/v1/validation?city=${city}`).catch(() => null)
         ]);
 
         if (cancelled) return;
@@ -64,8 +123,6 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
           setOverview(data);
         }
 
-        // Validation is best-effort — a missing/failed call just means
-        // this city has no real-satellite comparison yet, not an error.
         if (validationRes && validationRes.ok) {
           const data = await validationRes.json();
           setValidation(data);
@@ -87,12 +144,62 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
     };
 
     fetchData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [city]);
 
-  // Dynamically compute the baseline minimum LST across the city dataset
-  // so elevation scaling works consistently regardless of whether the city
-  // is cooler (e.g. Bengaluru/Guwahati/Kochi < 35°C) or hot arid (e.g. Phoenix/Delhi).
+  // Handle cell click selection and fetch local SHAP explanation
+  const handleSelectCell = useCallback(
+    (cellProperties) => {
+      if (!cellProperties?.grid_id) return;
+
+      setSelectedCell(cellProperties);
+      setShapError(null);
+
+      const cacheKey = `${city}:${cellProperties.grid_id}`;
+      if (shapCacheRef.current[cacheKey]) {
+        setShapData(shapCacheRef.current[cacheKey]);
+        setShapLoading(false);
+        return;
+      }
+
+      setShapLoading(true);
+      setShapData(null);
+
+      fetch(`${API_BASE}/api/v1/drivers?city=${city}&grid_id=${cellProperties.grid_id}`)
+        .then((res) => {
+          if (!res.ok) throw new Error('SHAP request failed');
+          return res.json();
+        })
+        .then((data) => {
+          const explanation = data?.cell_explanation || null;
+          shapCacheRef.current[cacheKey] = explanation;
+          setShapData(explanation);
+        })
+        .catch((err) => {
+          console.warn('Local SHAP explanation unavailable', err);
+          setShapError('Local driver breakdown unavailable');
+        })
+        .finally(() => {
+          setShapLoading(false);
+        });
+    },
+    [city]
+  );
+
+  // Close inspector on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedCell(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Dynamically compute baseline minimum LST across the city dataset for elevation scaling
   const minLst = useMemo(() => {
     if (overview?.min_lst_c !== undefined && overview?.min_lst_c !== null) {
       return overview.min_lst_c;
@@ -108,7 +215,7 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
     return 20;
   }, [overview, gridData]);
 
-  // Controlled camera view state - 2D is the default visualization mode (pitch: 0)
+  // Controlled camera view state
   const [centerLon, centerLat] = cityInfo?.center || [77.20, 28.61];
   const [viewState, setViewState] = useState({
     longitude: centerLon,
@@ -121,8 +228,17 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
   // 2D vs 3D mode is derived directly from camera pitch
   const is3D = (viewState?.pitch || 0) > 10;
 
-  const layers = [
-    new GeoJsonLayer({
+  // Selected cell feature for the highlight outline layer
+  const selectedFeature = useMemo(() => {
+    if (!selectedCell || !gridData?.features) return null;
+    return (
+      gridData.features.find((f) => f.properties?.grid_id === selectedCell.grid_id) || null
+    );
+  }, [selectedCell, gridData]);
+
+  // DeckGL Layers: Main Heatmap Grid + Highlighted Selected Cell Outline
+  const layers = useMemo(() => {
+    const mainGridLayer = new GeoJsonLayer({
       id: 'grid-layer',
       data: gridData,
       pickable: true,
@@ -130,16 +246,14 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
       filled: true,
       extruded: is3D,
       wireframe: false,
-      getFillColor: d => {
+      autoHighlight: true,
+      highlightColor: [255, 255, 255, 45],
+      getFillColor: (d) => {
         const tier = d.properties.tier;
         const color = TIER_COLORS[tier] || [128, 128, 128];
-        // 175 alpha (68% opacity) gives vivid scientific color saturation
-        // while allowing basemap road networks, water bodies and place labels to remain legible
         return [...color, 175];
       },
-      getElevation: d => {
-        // Robust dynamic elevation: scales from city minimum so cooler cities (< 35°C)
-        // produce rich topographical 3D relief rather than flat 0-height terrain
+      getElevation: (d) => {
         const lst = d.properties?.lst_mean ?? minLst;
         const delta = Math.max(0, lst - minLst);
         return 40 + delta * 110;
@@ -152,13 +266,41 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
         extruded: [is3D],
         getElevation: [minLst]
       }
-    })
-  ];
+    });
+
+    const selectedOutlineLayer = selectedFeature
+      ? new GeoJsonLayer({
+          id: 'selected-cell-outline',
+          data: {
+            type: 'FeatureCollection',
+            features: [selectedFeature]
+          },
+          pickable: false,
+          stroked: true,
+          filled: false,
+          extruded: is3D,
+          wireframe: false,
+          lineWidthMinPixels: 2.5,
+          getLineColor: [255, 255, 255, 255],
+          getElevation: (d) => {
+            const lst = d.properties?.lst_mean ?? minLst;
+            const delta = Math.max(0, lst - minLst);
+            return 40 + delta * 110 + 3;
+          },
+          updateTriggers: {
+            extruded: [is3D],
+            getElevation: [minLst]
+          }
+        })
+      : null;
+
+    return selectedOutlineLayer ? [mainGridLayer, selectedOutlineLayer] : [mainGridLayer];
+  }, [gridData, is3D, minLst, selectedFeature]);
 
   // Smoothly pan & reset to new city center when selected city changes
   useEffect(() => {
     if (cityInfo?.center) {
-      setViewState(prev => ({
+      setViewState((prev) => ({
         ...prev,
         longitude: cityInfo.center[0],
         latitude: cityInfo.center[1],
@@ -170,6 +312,24 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
       }));
     }
   }, [city, cityInfo]);
+
+  // Top 3 contributing features from SHAP analysis
+  const topDrivers = useMemo(() => {
+    if (!shapData?.shap_values || shapData.shap_values.length === 0) return [];
+    return [...shapData.shap_values]
+      .sort((a, b) => Math.abs(b.shap) - Math.abs(a.shap))
+      .slice(0, 3);
+  }, [shapData]);
+
+  // Delta calculation for selected cell
+  const selectedDelta = useMemo(() => {
+    if (!selectedCell) return null;
+    if (selectedCell.delta_above_mean !== undefined) return selectedCell.delta_above_mean;
+    if (overview?.mean_lst_c && selectedCell.lst_mean) {
+      return selectedCell.lst_mean - overview.mean_lst_c;
+    }
+    return 0;
+  }, [selectedCell, overview]);
 
   return (
     <div className="map-view-container animate-fade-in">
@@ -191,21 +351,33 @@ export default function MapView({ city, cityInfo, onOpenMethodology }) {
           onViewStateChange={({ viewState: newViewState }) => setViewState(newViewState)}
           controller={true}
           layers={layers}
+          onClick={(info) => {
+            if (info?.object?.properties) {
+              handleSelectCell(info.object.properties);
+            }
+          }}
           getTooltip={({ object }) => {
             if (!object?.properties) return null;
             const p = object.properties;
-            const deltaStr = p.delta_above_mean !== undefined
-              ? `${p.delta_above_mean >= 0 ? '+' : ''}${p.delta_above_mean.toFixed(2)}°C vs city mean`
-              : (overview?.mean_lst_c ? `${(p.lst_mean - overview.mean_lst_c >= 0 ? '+' : '')}${(p.lst_mean - overview.mean_lst_c).toFixed(2)}°C vs city mean` : '');
-            return (
-              `Cell: ${p.grid_id}
-LST: ${p.lst_mean.toFixed(1)}°C ${deltaStr ? `(${deltaStr})` : ''}
-Tier: ${p.tier?.toUpperCase()} (Relative Anomaly)
-Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
-            );
+            const delta =
+              p.delta_above_mean !== undefined
+                ? p.delta_above_mean
+                : overview?.mean_lst_c
+                ? p.lst_mean - overview.mean_lst_c
+                : 0;
+            const deltaStr = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}°C vs city mean`;
+            const tierStr = p.tier?.toUpperCase() || 'NORMAL';
+
+            return `Cell: ${p.grid_id}
+LST: ${p.lst_mean.toFixed(1)}°C (${deltaStr})
+Tier: ${tierStr}
+Click to pin local SHAP drivers`;
           }}
         >
-          <Map mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK} attributionControl={false} />
+          <Map
+            mapStyle={theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK}
+            attributionControl={false}
+          />
         </DeckGL>
 
         {/* Compact Field Atlas Map Navigation Controls (Top-Left) */}
@@ -214,6 +386,161 @@ Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
           viewState={viewState}
           onViewStateChange={setViewState}
         />
+
+        {/* Pinned Cell Inspection Panel (Docked at Left below map controls) */}
+        {selectedCell && (
+          <aside
+            className="cell-inspector-panel glass-panel animate-fade-in"
+            role="region"
+            aria-label={`Inspection details for cell ${selectedCell.grid_id}`}
+          >
+            {/* Header with Cell ID, Tier Badge & Close Button */}
+            <div className="inspector-header">
+              <div className="inspector-title-line">
+                <MapPin size={13} className="inspector-icon" />
+                <span className="inspector-cell-id font-mono">{selectedCell.grid_id}</span>
+                <span
+                  className={`inspector-tier-badge tier-${selectedCell.tier} font-mono`}
+                  title={`Relative classification: ${selectedCell.tier}`}
+                >
+                  {selectedCell.tier?.toUpperCase()}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="inspector-close-btn"
+                onClick={() => setSelectedCell(null)}
+                title="Dismiss panel (Esc)"
+                aria-label="Dismiss panel"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            {/* Core Thermal Measurement & Difference from Mean */}
+            <div className="inspector-temp-block">
+              <div className="inspector-temp-row">
+                <span className="inspector-temp-val font-mono">
+                  {selectedCell.lst_mean.toFixed(1)}
+                  <span className="inspector-unit">°C</span>
+                </span>
+                <span
+                  className={`inspector-delta-tag font-mono ${
+                    selectedDelta >= 0 ? 'delta-positive' : 'delta-negative'
+                  }`}
+                  title="Temperature anomaly relative to citywide baseline mean"
+                >
+                  {selectedDelta >= 0 ? '+' : ''}
+                  {selectedDelta.toFixed(2)}°C vs mean
+                </span>
+              </div>
+              <span className="inspector-temp-sub">
+                500m Surface Skin Temperature · Baseline {overview?.mean_lst_c?.toFixed(1)}°C
+              </span>
+            </div>
+
+            {/* Biophysical Attributes Matrix */}
+            <div className="inspector-attributes-grid">
+              <div className="attr-cell">
+                <span className="attr-label">Vegetation Cover</span>
+                <span className="attr-value font-mono">
+                  {(selectedCell.frac_vegetation * 100).toFixed(1)}%
+                </span>
+              </div>
+
+              <div className="attr-cell">
+                <span className="attr-label">Impervious Surface</span>
+                <span className="attr-value font-mono">
+                  {(selectedCell.frac_impervious * 100).toFixed(1)}%
+                </span>
+              </div>
+
+              <div className="attr-cell">
+                <span className="attr-label">Vegetation (NDVI)</span>
+                <span className="attr-value font-mono">
+                  {selectedCell.ndvi_mean !== undefined ? selectedCell.ndvi_mean.toFixed(3) : '—'}
+                </span>
+              </div>
+
+              <div className="attr-cell">
+                <span className="attr-label">Built-up (NDBI)</span>
+                <span className="attr-value font-mono">
+                  {selectedCell.ndbi_mean !== undefined ? selectedCell.ndbi_mean.toFixed(3) : '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Top 3 Local SHAP Drivers Section */}
+            <div className="inspector-drivers-section">
+              <div className="drivers-header">
+                <Sparkles size={11} className="drivers-icon" />
+                <span className="drivers-title">Local Heat Drivers (SHAP)</span>
+                <span className="drivers-sub-tag font-mono">°C Impact</span>
+              </div>
+
+              {shapLoading && (
+                <div className="drivers-loading">
+                  <RefreshCw size={12} className="spin-icon" />
+                  <span>Calculating local feature contributions...</span>
+                </div>
+              )}
+
+              {!shapLoading && shapError && (
+                <div className="drivers-empty">{shapError}</div>
+              )}
+
+              {!shapLoading && !shapError && topDrivers.length > 0 && (
+                <div className="drivers-list">
+                  {topDrivers.map((d) => {
+                    const isWarming = d.shap > 0;
+                    const formattedValue = formatFeatureValue(d.feature, d.value);
+                    const featureName = formatFeatureName(d.feature);
+
+                    return (
+                      <div key={d.feature} className="driver-row">
+                        <div className="driver-info">
+                          <span className="driver-name" title={featureName}>
+                            {featureName}
+                          </span>
+                          <span className="driver-raw font-mono">{formattedValue}</span>
+                        </div>
+
+                        <div
+                          className={`driver-shap-badge font-mono ${
+                            isWarming ? 'driver-warming' : 'driver-cooling'
+                          }`}
+                          title={`Marginal LST impact: ${d.shap > 0 ? '+' : ''}${d.shap.toFixed(
+                            3
+                          )}°C`}
+                        >
+                          {isWarming ? (
+                            <ArrowUpRight size={11} className="direction-icon" />
+                          ) : (
+                            <ArrowDownRight size={11} className="direction-icon" />
+                          )}
+                          <span>
+                            {isWarming ? '+' : ''}
+                            {d.shap.toFixed(2)}°C
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!shapLoading && !shapError && topDrivers.length === 0 && (
+                <div className="drivers-empty">
+                  SHAP feature attribution data is not available for this cell.
+                </div>
+              )}
+            </div>
+
+            <div className="inspector-footer-hint font-mono">
+              Press <strong>ESC</strong> or click another cell to update
+            </div>
+          </aside>
+        )}
 
         {/* Bottom Left: Map Provenance Watermark and Required Map Attributions */}
         <div className="map-footer-left">
@@ -230,7 +557,10 @@ Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
         <div className="kpi-overlay glass-panel">
           {/* Subtle but visible MODELLED DATA provenance bar */}
           <div className="modelled-data-bar">
-            <div className="modelled-data-chip" title="Simulated microclimate data, uncalibrated against live observations">
+            <div
+              className="modelled-data-chip"
+              title="Simulated microclimate data, uncalibrated against live observations"
+            >
               <span className="modelled-dot"></span>
               <span className="modelled-text">MODELLED DATA</span>
             </div>
@@ -304,7 +634,11 @@ Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
               <div className="kpi-metric-info">
                 <span className="kpi-metric-name">Severe Hotspot Footprint</span>
                 <span className="kpi-metric-def">
-                  Critical &amp; High stress cells ({overview.hotspot_count}{overview.grid_cells ? ` · ${((overview.hotspot_count / overview.grid_cells) * 100).toFixed(1)}%` : ''})
+                  Critical &amp; High stress cells ({overview.hotspot_count}
+                  {overview.grid_cells
+                    ? ` · ${((overview.hotspot_count / overview.grid_cells) * 100).toFixed(1)}%`
+                    : ''}
+                  )
                 </span>
               </div>
               <div className="kpi-metric-value font-mono warning">
@@ -326,19 +660,45 @@ Vegetation: ${(p.frac_vegetation * 100).toFixed(1)}%`
             </div>
 
             {/* Continuous 5-segment horizontal temperature gradient bar */}
-            <div className="horizontal-gradient-bar" role="img" aria-label="Stepped horizontal temperature ramp from cool to critical">
-              <div className="gradient-segment" style={{ background: '#2C7BB6' }} title={`Cool: < ${(overview.mean_lst_c - 1.5).toFixed(1)}°C (ΔT < -1.5°C)`} />
-              <div className="gradient-segment" style={{ background: '#ABD9E9' }} title={`Normal: ${(overview.mean_lst_c - 1.5).toFixed(1)} to ${overview.mean_lst_c.toFixed(1)}°C (ΔT -1.5 to 0.0°C)`} />
-              <div className="gradient-segment" style={{ background: '#FFFFBF' }} title={`Moderate: ${overview.mean_lst_c.toFixed(1)} to ${(overview.mean_lst_c + 1.5).toFixed(1)}°C (ΔT 0.0 to +1.5°C)`} />
-              <div className="gradient-segment" style={{ background: '#FDAE61' }} title={`High: ${(overview.mean_lst_c + 1.5).toFixed(1)} to ${(overview.mean_lst_c + 3.0).toFixed(1)}°C (ΔT +1.5 to +3.0°C)`} />
-              <div className="gradient-segment" style={{ background: '#D7191C' }} title={`Critical: ≥ ${(overview.mean_lst_c + 3.0).toFixed(1)}°C (ΔT ≥ +3.0°C)`} />
+            <div
+              className="horizontal-gradient-bar"
+              role="img"
+              aria-label="Stepped horizontal temperature ramp from cool to critical"
+            >
+              <div
+                className="gradient-segment"
+                style={{ background: '#2C7BB6' }}
+                title={`Cool: < ${(overview.mean_lst_c - 1.5).toFixed(1)}°C (ΔT < -1.5°C)`}
+              />
+              <div
+                className="gradient-segment"
+                style={{ background: '#ABD9E9' }}
+                title={`Normal: ${(overview.mean_lst_c - 1.5).toFixed(1)} to ${overview.mean_lst_c.toFixed(1)}°C (ΔT -1.5 to 0.0°C)`}
+              />
+              <div
+                className="gradient-segment"
+                style={{ background: '#FFFFBF' }}
+                title={`Moderate: ${overview.mean_lst_c.toFixed(1)} to ${(overview.mean_lst_c + 1.5).toFixed(1)}°C (ΔT 0.0 to +1.5°C)`}
+              />
+              <div
+                className="gradient-segment"
+                style={{ background: '#FDAE61' }}
+                title={`High: ${(overview.mean_lst_c + 1.5).toFixed(1)} to ${(overview.mean_lst_c + 3.0).toFixed(1)}°C (ΔT +1.5 to +3.0°C)`}
+              />
+              <div
+                className="gradient-segment"
+                style={{ background: '#D7191C' }}
+                title={`Critical: ≥ ${(overview.mean_lst_c + 3.0).toFixed(1)}°C (ΔT ≥ +3.0°C)`}
+              />
             </div>
 
             {/* Actual temperature threshold ticks */}
             <div className="legend-ticks-row font-mono">
               <span className="legend-tick tick-left">&lt;{(overview.mean_lst_c - 1.5).toFixed(1)}°</span>
               <span className="legend-tick tick-q1">{(overview.mean_lst_c - 1.5).toFixed(1)}°</span>
-              <span className="legend-tick tick-center" title="City Baseline Mean">{overview.mean_lst_c.toFixed(1)}°</span>
+              <span className="legend-tick tick-center" title="City Baseline Mean">
+                {overview.mean_lst_c.toFixed(1)}°
+              </span>
               <span className="legend-tick tick-q3">{(overview.mean_lst_c + 1.5).toFixed(1)}°</span>
               <span className="legend-tick tick-right">≥{(overview.mean_lst_c + 3.0).toFixed(1)}°</span>
             </div>
