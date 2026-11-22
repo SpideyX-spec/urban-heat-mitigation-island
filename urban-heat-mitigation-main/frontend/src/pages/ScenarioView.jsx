@@ -1,3 +1,10 @@
+const USD_M_TO_INR_CR = 8.4; // $1M ≈ ₹8.4 Crore
+
+function formatInrCrores(usdMillions) {
+  if (usdMillions == null) return '—';
+  const crores = usdMillions * USD_M_TO_INR_CR;
+  return `₹${crores.toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr`;
+}
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
